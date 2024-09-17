@@ -51,15 +51,15 @@ const generateSampleData = (numSensors: number, pointsPerSensor: number): LogAna
 };
 
 // Generate 100 points for each of 3 sensors
-const sampleData = generateSampleData(3, 100);
+const sampleData = generateSampleData(2, 100);
 
 const timeRanges = ['1D', '1W', '1M', '3M', '6M', '1Y', 'ALL', 'CUSTOM'];
 
-// Define a color map for sensors
-const sensorColorMap: { [key: string]: { color: string } } = {
-  '1': { color: '#FF6B6B' },  // Coral Red
-  '2': { color: '#4ECDC4' },  // Caribbean Green
-  '3': { color: '#45B7D1' },  // Blue Grotto
+// Update the sensorColorMap to use entityId as the key
+const sensorColorMap: { [key: string]: string } = {
+  '1': '#FF6B6B',  // Coral Red
+  '2': '#4ECDC4',  // Caribbean Green
+  '3': '#45B7D1',  // Blue Grotto
 };
 
 export default function App() {
@@ -73,12 +73,25 @@ export default function App() {
     return ['All', ...uniqueSensors];
   }, []);
 
-  const filteredData = useMemo(() => {
-    if (selectedSensor === 'All') {
-      return sampleData;
-    }
-    return sampleData.filter(d => d.entityId === selectedSensor);
-  }, [selectedSensor]);
+  // Group data by entityId
+  const groupedData = useMemo(() => {
+    return sampleData.reduce((acc, item) => {
+      if (!acc[item.entityId]) {
+        acc[item.entityId] = [];
+      }
+      acc[item.entityId].push(item);
+      return acc;
+    }, {} as { [key: string]: LogAnalog[] });
+  }, [sampleData]);
+
+  // Add this new useMemo hook to get the latest values for each sensor
+  const latestSensorValues = useMemo(() => {
+    return Object.entries(groupedData).reduce((acc, [entityId, data]) => {
+      const latestData = data[data.length - 1];
+      acc[entityId] = latestData.valueCurr;
+      return acc;
+    }, {} as { [key: string]: number });
+  }, [groupedData]);
 
   return (
     <View style={styles.container}>
@@ -104,11 +117,24 @@ export default function App() {
           ))}
         </View>
       </View>
+      
+      {/* New block to display current sensor values */}
+      <View style={styles.sensorValuesContainer}>
+        {Object.entries(latestSensorValues).map(([entityId, value]) => (
+          <View key={entityId} style={styles.sensorValueItem}>
+            <Text style={[styles.sensorValueText, { color: sensorColorMap[entityId] || '#000000' }]}>
+              Sensor {entityId}: {value.toFixed(2)}
+            </Text>
+          </View>
+        ))}
+      </View>
+
       <View style={{ width: width * 0.9, height: height * 0.6 }}>
         <CartesianChart
-          data={filteredData}
+          data={sampleData}
+          domainPadding={{ top: 100, bottom: 100 }}
           xKey="dateTimeLocal"
-          yKeys={["valueCurr"]}
+          yKeys={["valueAvg", "valueCurr", "valueMax", "valueMin"]}
           axisOptions={{
             font,
             formatXLabel: (value) => format(new Date(value), 'MM/dd'),
@@ -117,16 +143,39 @@ export default function App() {
         >
           {({ points }) => (
             <>
-              {sensors.slice(1).map((sensor) => {
-                const sensorColor = sensorColorMap[sensor]?.color || '#000000';
-                return (
-                  <Line
-                    key={sensor}
-                    points={points.valueCurr.filter(p => p.entityId === sensor.entityId)}
-                    color={sensorColor}
-                    strokeWidth={2}
-                  />
-                );
+              {Object.entries(groupedData).map(([entityId, data]) => {
+                // Only render the line if it's the selected sensor or if "All" is selected
+                if (selectedSensor === 'All' || selectedSensor === entityId) {
+                  return (
+                    <>
+                      <Line
+                        key={`${entityId}-avg`}
+                        points={points.valueAvg}
+                        color={sensorColorMap[entityId] || '#000000'}
+                        strokeWidth={2}
+                      />
+                      <Line
+                        key={`${entityId}-curr`}
+                        points={points.valueCurr}
+                        color={sensorColorMap[entityId] || '#000000'}
+                        strokeWidth={2}
+                      />
+                      <Line
+                        key={`${entityId}-max`}
+                        points={points.valueMax}
+                        color={sensorColorMap[entityId] || '#000000'}
+                        strokeWidth={2}
+                      />
+                      <Line
+                        key={`${entityId}-min`}
+                        points={points.valueMin}
+                        color={sensorColorMap[entityId] || '#000000'}
+                        strokeWidth={2}
+                      />
+                    </>
+                  );
+                }
+                return null;
               })}
             </>
           )}
@@ -170,5 +219,20 @@ const styles = StyleSheet.create({
   },
   timeRangeText: {
     fontSize: 12,
+  },
+  
+  sensorValuesContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    flexWrap: 'wrap',
+    marginBottom: 10,
+  },
+  sensorValueItem: {
+    marginHorizontal: 10,
+    marginVertical: 5,
+  },
+  sensorValueText: {
+    fontSize: 16,
+    fontWeight: 'bold',
   },
 });
