@@ -1,13 +1,16 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { CartesianChart, Line as VictoryLine } from 'victory-native';
-import { format, addDays } from 'date-fns';
+import dayjs from 'dayjs';
+import utc from 'dayjs/plugin/utc';
 import { useFont } from '@shopify/react-native-skia';
 import inter from "../assets/inter-medium.ttf";
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { useChartPressState } from 'victory-native';
 import { useSharedValue, useAnimatedStyle } from 'react-native-reanimated';
 import Animated from 'react-native-reanimated';
+
+dayjs.extend(utc);
 
 // Define the LogAnalog type
 type LogAnalog = {
@@ -33,46 +36,70 @@ type SelectionLabelProps = {
 };
 
 // Function to generate sample data
-const generateSampleData = (numSensors: number, pointsPerSensor: number): LogAnalog[] => {
+const generateSampleData = (points: number): LogAnalog[] => {
   const data: LogAnalog[] = [];
-  const startDate = new Date('2023-01-01');
+  const startDate = dayjs().subtract(10, 'd').startOf('day').toDate();
 
-  for (let sensorId = 1; sensorId <= numSensors; sensorId++) {
-    for (let i = 0; i < pointsPerSensor; i++) {
-      const currentDate = addDays(startDate, i);
-      const baseValue = Math.random() * 50 + 20; // Random base value between 20 and 70
-      data.push({
-        dateTimeLocal: currentDate.toISOString(),
-        entityId: sensorId.toString(),
-        entityIndex: sensorId.toString(),
-        entityName: `Sensor ${sensorId}`,
-        projectId: 'P1',
-        projectName: 'Project 1',
-        serial: `S00${sensorId}`,
-        unitName: 'Celsius',
-        valueAvg: baseValue,
-        valueCurr: baseValue + Math.random() * 2 - 1, // Current value within ±1 of average
-        valueMax: baseValue + Math.random() * 2, // Max value up to 2 above average
-        valueMin: baseValue - Math.random() * 2, // Min value up to 2 below average
-      });
-    }
+  for (let i = 0; i < points; i++) {
+    const currentDate = dayjs(startDate).add(i, 'd')
+    const baseValue = Math.random() * 50 + 20; // Random base value between 20 and 70
+    data.push({
+      dateTimeLocal: currentDate.format('YYYY-MM-DD[T]HH:mm:ss.SSS[Z]'),
+      entityId: 'entity1',
+      entityIndex: '1',
+      entityName: `Sensor ${1}`,
+      projectId: 'P1',
+      projectName: 'Project 1',
+      serial: `S00${1}`,
+      unitName: 'Celsius',
+      valueAvg: baseValue,
+      valueCurr: baseValue + Math.random() * 2 - 1, // Current value within ±1 of average
+      valueMax: baseValue + Math.random() * 2, // Max value up to 2 above average
+      valueMin: baseValue - Math.random() * 2, // Min value up to 2 below average
+    });
   }
   return data;
 };
 
 // Generate 100 points for each of 3 sensors
-const sampleData = generateSampleData(2, 10);
+const sampleData = generateSampleData(10);
 
 export default function App() {
+  const selected = {
+    start: dayjs().subtract(8, 'd').startOf('day').toDate(),
+    end: dayjs().subtract(5, 'd').startOf('day').toDate(),
+  }
   const font = useFont(inter, 12);
   const { state } = useChartPressState<{ x: string; y: Record<"valueAvg", number> }>({
     x: '',
     y: { valueAvg: 0 }
   });
   const chartBoundsRef = useRef({ left: 0, right: 0, top: 0, bottom: 0 });
+  // get position from selected date
+  const getXPositionFromDate = (date: Date) => {
+    if (!date) return null;
+
+    // Sort data chronologically
+    const sortedDates = [...sampleData]
+      .sort((a, b) => new Date(a.dateTimeLocal).getTime() - new Date(b.dateTimeLocal).getTime());
+
+    // Get the date range of the data
+    const firstDate = dayjs(sortedDates[0].dateTimeLocal);
+    const lastDate = dayjs(sortedDates[sortedDates.length - 1].dateTimeLocal);
+    const totalDuration = lastDate.diff(firstDate);
+
+    // Calculate where the input date falls within the range
+    const dateDiff = dayjs(date).diff(firstDate);
+    const percentage = dateDiff / totalDuration;
+
+    // Convert percentage to x position within chart bounds
+    return chartBoundsRef.current.left + (widthBounds * percentage);
+  }
+
   const widthBounds = Math.abs(chartBoundsRef.current.right - chartBoundsRef.current.left);
   const heightBounds = Math.abs(chartBoundsRef.current.bottom - chartBoundsRef.current.top);
   // Shared values for range selection
+
   const startX = useSharedValue<number | null>(null);
   const endX = useSharedValue<number | null>(null);
   const isSelecting = useSharedValue(false);
@@ -86,19 +113,23 @@ export default function App() {
     const chartWidth = widthBounds;
     const normalizedX = Math.max(0, Math.min(xPos, chartWidth));
     const percentage = normalizedX / chartWidth;
-    
+
     // Sort data chronologically
     const sortedDates = [...sampleData]
       .sort((a, b) => new Date(a.dateTimeLocal).getTime() - new Date(b.dateTimeLocal).getTime());
-    
+
     const index = Math.floor(percentage * (sortedDates.length - 1));
-    return index >= 0 ? new Date(sortedDates[index].dateTimeLocal) : null;
+    return index >= 0 ? dayjs(sortedDates[index].dateTimeLocal).format('YYYY-MM-DD[T]HH:mm:ss') : null;
   };
 
+  useEffect(() => {
+    startX.value = getXPositionFromDate(selected.start);
+    endX.value = getXPositionFromDate(selected.end);
+  }, [selected]);
   // Enhanced selection overlay style with more visible defaults
   const selectionOverlayStyle = useAnimatedStyle(() => {
     if (startX.value === null || endX.value === null) {
-      return { 
+      return {
         position: 'absolute',
         opacity: 0,
         width: widthBounds,
@@ -109,11 +140,11 @@ export default function App() {
 
     const left = Math.min(startX.value, endX.value) + chartBoundsRef.current.left;
     const selectionWidth = Math.abs(endX.value - startX.value);
-    
+
     return {
       position: 'absolute',
       left,
-      top:0,
+      top: 0,
       width: selectionWidth,
       height: heightBounds,
       opacity: 1,
@@ -153,38 +184,38 @@ export default function App() {
   }));
 
   const gesture = Gesture.Pan()
-      .onBegin((event) => {        
+    .onBegin((event) => {
+      const chartWidth = widthBounds
+      const xPos = - chartBoundsRef.current.left + Math.max(0, Math.min(event.x, chartWidth));
+      isSelecting.value = true;
+      startX.value = xPos;
+
+      const initialDate = getDateFromXPosition(xPos);
+      if (initialDate) {
+        startDate.value = initialDate;
+        endDate.value = initialDate;
+      }
+    })
+    .onUpdate((event) => {
+      if (isSelecting.value) {
         const chartWidth = widthBounds
         const xPos = - chartBoundsRef.current.left + Math.max(0, Math.min(event.x, chartWidth));
-        isSelecting.value = true;
-        startX.value = xPos;
-        
-        const initialDate = getDateFromXPosition(xPos);
-        if (initialDate) {
-          startDate.value = initialDate;
-          endDate.value = initialDate;
+        endX.value = xPos;
+        const newEndDate = getDateFromXPosition(xPos);
+        if (newEndDate) {
+          endDate.value = newEndDate;
         }
-      })
-      .onUpdate((event) => {
-        if (isSelecting.value) {
-          const chartWidth = widthBounds
-          const xPos = - chartBoundsRef.current.left + Math.max(0, Math.min(event.x, chartWidth));
-          endX.value = xPos;          
-          const newEndDate = getDateFromXPosition(xPos);
-          if (newEndDate) {
-            endDate.value = newEndDate;
-          }
-        }
-      })
-      .onEnd(() => {
-        isSelecting.value = false;
-        console.log('Selection range:', {
-          start: startDate.value ? new Date(startDate.value).toISOString() : null,
-          end: endDate.value ? new Date(endDate.value).toISOString() : null
-        });
-        
-      })
-      .minDistance(0); // Allow immediate selection without movement
+      }
+    })
+    .onEnd(() => {
+      isSelecting.value = false;
+      console.log('Selection range:', {
+        start: startDate.value ? dayjs(startDate.value).format('DD-MM-YYYY HH:mm:ss') : null,
+        end: endDate.value ? dayjs(endDate.value).format('DD-MM-YYYY HH:mm:ss') : null
+      });
+
+    })
+    .minDistance(0); // Allow immediate selection without movement
 
   return (
     <View style={styles.container}>
@@ -197,8 +228,8 @@ export default function App() {
             yKeys={["valueAvg"]}
             axisOptions={{
               font,
-              formatXLabel: (value) => format(new Date(value), 'MM/dd'),
-              tickCount: { x: 15, y: 5 },
+              formatXLabel: (value) => dayjs(value).format('DD-MM'),
+              tickCount: { x: 10, y: 5 },
             }}
             chartPressState={[state]}
           >
@@ -220,11 +251,11 @@ export default function App() {
               );
             }}
           </CartesianChart>
-          
+
           <Animated.View style={selectionOverlayStyle} />
           <Animated.View style={leftHandleStyle} />
           <Animated.View style={rightHandleStyle} />
-        
+
         </View>
       </GestureDetector>
     </View>
