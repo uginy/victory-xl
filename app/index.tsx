@@ -1,4 +1,4 @@
-import React, { useMemo, useRef } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { CartesianChart, Line as VictoryLine } from 'victory-native';
 import { format, addDays } from 'date-fns';
@@ -70,8 +70,8 @@ export default function App() {
     y: { valueAvg: 0 }
   });
   const chartBoundsRef = useRef({ left: 0, right: 0, top: 0, bottom: 0 });
-  const widthBounds = chartBoundsRef.current.right - chartBoundsRef.current.left;
-  const heightBounds = chartBoundsRef.current.bottom - chartBoundsRef.current.top;
+  const widthBounds = Math.abs(chartBoundsRef.current.right - chartBoundsRef.current.left);
+  const heightBounds = Math.abs(chartBoundsRef.current.bottom - chartBoundsRef.current.top);
   // Shared values for range selection
   const startX = useSharedValue<number | null>(null);
   const endX = useSharedValue<number | null>(null);
@@ -113,12 +113,13 @@ export default function App() {
     return {
       position: 'absolute',
       left,
+      top:0,
       width: selectionWidth,
       height: heightBounds,
       opacity: 1,
       backgroundColor: 'rgba(0, 122, 255, 0.2)',
-      borderLeftWidth: 2,
-      borderRightWidth: 2,
+      borderLeftWidth: 1,
+      borderRightWidth: 1,
       borderColor: 'rgba(0, 122, 255, 0.8)',
       zIndex: 10,
     };
@@ -151,11 +152,10 @@ export default function App() {
     zIndex: 11,
   }));
 
-  const gesture = useMemo(() => {
-    return Gesture.Pan()
-      .onBegin((event) => {
+  const gesture = Gesture.Pan()
+      .onBegin((event) => {        
         const chartWidth = widthBounds
-        const xPos = Math.max(0, Math.min(event.x, chartWidth));
+        const xPos = - chartBoundsRef.current.left + Math.max(0, Math.min(event.x, chartWidth));
         isSelecting.value = true;
         startX.value = xPos;
         
@@ -168,7 +168,7 @@ export default function App() {
       .onUpdate((event) => {
         if (isSelecting.value) {
           const chartWidth = widthBounds
-          const xPos = Math.max(0, Math.min(event.x, chartWidth));
+          const xPos = - chartBoundsRef.current.left + Math.max(0, Math.min(event.x, chartWidth));
           endX.value = xPos;          
           const newEndDate = getDateFromXPosition(xPos);
           if (newEndDate) {
@@ -178,10 +178,13 @@ export default function App() {
       })
       .onEnd(() => {
         isSelecting.value = false;
+        console.log('Selection range:', {
+          start: startDate.value ? new Date(startDate.value).toISOString() : null,
+          end: endDate.value ? new Date(endDate.value).toISOString() : null
+        });
+        
       })
       .minDistance(0); // Allow immediate selection without movement
-
-  }, [widthBounds]); // Add width as dependency since it's used inside
 
   return (
     <View style={styles.container}>
