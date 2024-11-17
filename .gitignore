@@ -2,7 +2,7 @@
 
 # dependencies
 node_modules/
-
+.idea/
 # Expo
 .expo/
 dist/
@@ -33,3 +33,7 @@ yarn-error.*
 
 # typescript
 *.tsbuildinfo
+.idea/modules.xml
+bun.lockb
+.idea/vcs.xml
+.idea/victory-xl.iml
