@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { StyleSheet, View, useWindowDimensions } from 'react-native';
 import { CartesianChart, Line as VictoryLine } from 'victory-native';
 import { format, addDays } from 'date-fns';
@@ -8,6 +8,7 @@ import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { useChartPressState } from 'victory-native';
 import { useSharedValue, useAnimatedStyle, withSpring, interpolateColor } from 'react-native-reanimated';
 import Animated from 'react-native-reanimated';
+import { State } from 'react-native-gesture-handler';
 
 // Define the LogAnalog type
 type LogAnalog = {
@@ -24,6 +25,41 @@ type LogAnalog = {
   valueMax: number;
   valueMin: number;
 };
+
+// Add this type definition near the top of the file
+type SelectionLabelProps = {
+  date: Date | null;
+  xPosition: number;
+  isStart?: boolean;
+};
+
+// Add this new component after the LogAnalog type definition
+function SelectionLabel({ date, xPosition, isStart = true }: SelectionLabelProps) {
+  if (!date || xPosition === null) return null;
+  
+  return (
+    <Animated.View
+      style={[
+        styles.selectionLabel,
+        {
+          position: 'absolute',
+          left: xPosition - 50, // Adjust center position
+          bottom: -40, // Move further down to avoid overlap
+          backgroundColor: 'rgba(0, 122, 255, 0.9)',
+          padding: 8,
+          borderRadius: 6,
+          minWidth: 120,
+          alignItems: 'center',
+          zIndex: 1000,
+        },
+      ]}
+    >
+      <Animated.Text style={styles.selectionLabelText}>
+        {format(date, 'MM/dd/yyyy')}
+      </Animated.Text>
+    </Animated.View>
+  );
+}
 
 // Function to generate sample data
 const generateSampleData = (numSensors: number, pointsPerSensor: number): LogAnalog[] => {
@@ -59,12 +95,19 @@ const sampleData = generateSampleData(2, 10);
 export default function App() {
   const font = useFont(inter, 12);
   const { width, height } = useWindowDimensions();
-  const { state } = useChartPressState({ x: 0, y: { valueCurr: 0 } });
+  const { state } = useChartPressState<{ x: string; y: Record<"valueAvg", number> }>({
+    x: '',
+    y: { valueAvg: 0 }
+  });
 
   // Shared values for range selection
   const startX = useSharedValue<number | null>(null);
   const endX = useSharedValue<number | null>(null);
   const isSelecting = useSharedValue(false);
+
+  // In the main App component, add these new pieces of state
+  const startDate = useSharedValue<Date | null>(null);
+  const endDate = useSharedValue<Date | null>(null);
 
   // Function to convert x position to date
   const getDateFromXPosition = (xPos: number): Date | null => {
@@ -136,49 +179,43 @@ export default function App() {
     zIndex: 11,
   }));
 
-  // Updated gesture handler with position clamping
-  const panGesture = Gesture.Pan()
-    .onStart((event) => {
-      const chartWidth = width * 0.9;
-      const xPos = Math.max(0, Math.min(event.x, chartWidth));
-      isSelecting.value = true;
-      startX.value = xPos;
-      endX.value = xPos;
-    })
-    .onUpdate((event) => {
-      if (isSelecting.value) {
+  const gesture = useMemo(() => {
+    return Gesture.Pan()
+      .onBegin((event) => {
         const chartWidth = width * 0.9;
         const xPos = Math.max(0, Math.min(event.x, chartWidth));
+        isSelecting.value = true;
+        startX.value = xPos;
         endX.value = xPos;
-      }
-    })
-    .onEnd(() => {
-      if (startX.value !== null && endX.value !== null) {
-        const startDate = getDateFromXPosition(startX.value);
-        const endDate = getDateFromXPosition(endX.value);
-
-        if (startDate && endDate) {
-          // Ensure dates are in chronological order
-          const [rangeStart, rangeEnd] = startDate > endDate 
-            ? [endDate, startDate] 
-            : [startDate, endDate];
-
-          console.log('Selected Date Range:', {
-            start: rangeStart.toISOString(),
-            end: rangeEnd.toISOString(),
-            formattedStart: format(rangeStart, 'MM/dd/yyyy'),
-            formattedEnd: format(rangeEnd, 'MM/dd/yyyy')
-          });
+        
+        const initialDate = getDateFromXPosition(xPos);
+        if (initialDate) {
+          startDate.value = initialDate;
+          endDate.value = initialDate;
         }
-      }
-      
-      // Reset selection
-      isSelecting.value = false;
-    });
+      })
+      .onUpdate((event) => {
+        if (isSelecting.value) {
+          const chartWidth = width * 0.9;
+          const xPos = Math.max(0, Math.min(event.x, chartWidth));
+          endX.value = xPos;
+          
+          const newEndDate = getDateFromXPosition(xPos);
+          if (newEndDate) {
+            endDate.value = newEndDate;
+          }
+        }
+      })
+      .onEnd(() => {
+        isSelecting.value = false;
+      })
+      .minDistance(0); // Allow immediate selection without movement
+
+  }, [width]); // Add width as dependency since it's used inside
 
   return (
     <View style={styles.container}>
-      <GestureDetector gesture={panGesture}>
+      <GestureDetector gesture={gesture}>
         <View style={styles.chartContainer}>
           <CartesianChart
             data={sampleData}
@@ -210,10 +247,25 @@ export default function App() {
             }}
           </CartesianChart>
           
-          {/* Move these after the CartesianChart */}
           <Animated.View style={selectionOverlayStyle} />
           <Animated.View style={leftHandleStyle} />
           <Animated.View style={rightHandleStyle} />
+          
+          {/* Update how we render the labels */}
+          {startX.value !== null && (
+            <SelectionLabel 
+              date={startDate.value} 
+              xPosition={startX.value} 
+              isStart={true}
+            />
+          )}
+          {endX.value !== null && (
+            <SelectionLabel 
+              date={endDate.value} 
+              xPosition={endX.value} 
+              isStart={false}
+            />
+          )}
         </View>
       </GestureDetector>
     </View>
@@ -231,7 +283,8 @@ const styles = StyleSheet.create({
   chartContainer: {
     width: '90%',
     height: '60%',
-    position: 'relative', // Important for absolute positioning of overlays
+    position: 'relative',
+    marginBottom: 50, // Increase margin to accommodate labels
   },
   header: {
     flexDirection: 'column',
@@ -284,12 +337,22 @@ const styles = StyleSheet.create({
   selectionLabel: {
     position: 'absolute',
     backgroundColor: 'rgba(0, 122, 255, 0.9)',
-    padding: 4,
-    borderRadius: 4,
-    top: -25,
+    padding: 8,
+    borderRadius: 6,
+    minWidth: 120,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
   },
   selectionLabelText: {
     color: 'white',
     fontSize: 12,
+    fontWeight: '600',
   },
 });
