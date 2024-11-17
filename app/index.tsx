@@ -1,14 +1,13 @@
-import React, { useMemo } from 'react';
-import { StyleSheet, View, useWindowDimensions } from 'react-native';
+import React, { useMemo, useRef } from 'react';
+import { StyleSheet, View } from 'react-native';
 import { CartesianChart, Line as VictoryLine } from 'victory-native';
 import { format, addDays } from 'date-fns';
 import { useFont } from '@shopify/react-native-skia';
 import inter from "../assets/inter-medium.ttf";
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { useChartPressState } from 'victory-native';
-import { useSharedValue, useAnimatedStyle, withSpring, interpolateColor } from 'react-native-reanimated';
+import { useSharedValue, useAnimatedStyle } from 'react-native-reanimated';
 import Animated from 'react-native-reanimated';
-import { State } from 'react-native-gesture-handler';
 
 // Define the LogAnalog type
 type LogAnalog = {
@@ -32,34 +31,6 @@ type SelectionLabelProps = {
   xPosition: number;
   isStart?: boolean;
 };
-
-// Add this new component after the LogAnalog type definition
-function SelectionLabel({ date, xPosition, isStart = true }: SelectionLabelProps) {
-  if (!date || xPosition === null) return null;
-  
-  return (
-    <Animated.View
-      style={[
-        styles.selectionLabel,
-        {
-          position: 'absolute',
-          left: xPosition - 50, // Adjust center position
-          bottom: -40, // Move further down to avoid overlap
-          backgroundColor: 'rgba(0, 122, 255, 0.9)',
-          padding: 8,
-          borderRadius: 6,
-          minWidth: 120,
-          alignItems: 'center',
-          zIndex: 1000,
-        },
-      ]}
-    >
-      <Animated.Text style={styles.selectionLabelText}>
-        {format(date, 'MM/dd/yyyy')}
-      </Animated.Text>
-    </Animated.View>
-  );
-}
 
 // Function to generate sample data
 const generateSampleData = (numSensors: number, pointsPerSensor: number): LogAnalog[] => {
@@ -94,12 +65,13 @@ const sampleData = generateSampleData(2, 10);
 
 export default function App() {
   const font = useFont(inter, 12);
-  const { width, height } = useWindowDimensions();
   const { state } = useChartPressState<{ x: string; y: Record<"valueAvg", number> }>({
     x: '',
     y: { valueAvg: 0 }
   });
-
+  const chartBoundsRef = useRef({ left: 0, right: 0, top: 0, bottom: 0 });
+  const widthBounds = chartBoundsRef.current.right - chartBoundsRef.current.left;
+  const heightBounds = chartBoundsRef.current.bottom - chartBoundsRef.current.top;
   // Shared values for range selection
   const startX = useSharedValue<number | null>(null);
   const endX = useSharedValue<number | null>(null);
@@ -111,7 +83,7 @@ export default function App() {
 
   // Function to convert x position to date
   const getDateFromXPosition = (xPos: number): Date | null => {
-    const chartWidth = width * 0.9;
+    const chartWidth = widthBounds;
     const normalizedX = Math.max(0, Math.min(xPos, chartWidth));
     const percentage = normalizedX / chartWidth;
     
@@ -129,20 +101,20 @@ export default function App() {
       return { 
         position: 'absolute',
         opacity: 0,
-        width: 0,
-        height: '100%',
+        width: widthBounds,
+        height: heightBounds,
         backgroundColor: 'transparent',
       };
     }
 
-    const left = Math.min(startX.value, endX.value);
+    const left = Math.min(startX.value, endX.value) + chartBoundsRef.current.left;
     const selectionWidth = Math.abs(endX.value - startX.value);
     
     return {
       position: 'absolute',
       left,
       width: selectionWidth,
-      height: '100%',
+      height: heightBounds,
       opacity: 1,
       backgroundColor: 'rgba(0, 122, 255, 0.2)',
       borderLeftWidth: 2,
@@ -155,7 +127,7 @@ export default function App() {
   // Simplified handle styles for debugging
   const leftHandleStyle = useAnimatedStyle(() => ({
     position: 'absolute',
-    left: startX.value !== null ? Math.min(startX.value, endX.value ?? 0) - 6 : 0,
+    left: chartBoundsRef.current.left + (startX.value !== null ? Math.min(startX.value, endX.value ?? 0) - 6 : 0),
     top: '50%',
     width: 12,
     height: 40,
@@ -168,7 +140,7 @@ export default function App() {
 
   const rightHandleStyle = useAnimatedStyle(() => ({
     position: 'absolute',
-    left: endX.value !== null ? Math.max(startX.value ?? 0, endX.value) - 6 : 0,
+    left: chartBoundsRef.current.left + (endX.value !== null ? Math.max(startX.value ?? 0, endX.value) - 6 : 0),
     top: '50%',
     width: 12,
     height: 40,
@@ -182,11 +154,10 @@ export default function App() {
   const gesture = useMemo(() => {
     return Gesture.Pan()
       .onBegin((event) => {
-        const chartWidth = width * 0.9;
+        const chartWidth = widthBounds
         const xPos = Math.max(0, Math.min(event.x, chartWidth));
         isSelecting.value = true;
         startX.value = xPos;
-        endX.value = xPos;
         
         const initialDate = getDateFromXPosition(xPos);
         if (initialDate) {
@@ -196,10 +167,9 @@ export default function App() {
       })
       .onUpdate((event) => {
         if (isSelecting.value) {
-          const chartWidth = width * 0.9;
+          const chartWidth = widthBounds
           const xPos = Math.max(0, Math.min(event.x, chartWidth));
-          endX.value = xPos;
-          
+          endX.value = xPos;          
           const newEndDate = getDateFromXPosition(xPos);
           if (newEndDate) {
             endDate.value = newEndDate;
@@ -211,7 +181,7 @@ export default function App() {
       })
       .minDistance(0); // Allow immediate selection without movement
 
-  }, [width]); // Add width as dependency since it's used inside
+  }, [widthBounds]); // Add width as dependency since it's used inside
 
   return (
     <View style={styles.container}>
@@ -229,8 +199,9 @@ export default function App() {
             }}
             chartPressState={[state]}
           >
-            {({ points }) => {
+            {({ points, chartBounds }) => {
               if (!points) return null;
+              chartBoundsRef.current = chartBounds
               return (
                 <>
                   {sampleData.map((entity, i) => (
@@ -250,22 +221,7 @@ export default function App() {
           <Animated.View style={selectionOverlayStyle} />
           <Animated.View style={leftHandleStyle} />
           <Animated.View style={rightHandleStyle} />
-          
-          {/* Update how we render the labels */}
-          {startX.value !== null && (
-            <SelectionLabel 
-              date={startDate.value} 
-              xPosition={startX.value} 
-              isStart={true}
-            />
-          )}
-          {endX.value !== null && (
-            <SelectionLabel 
-              date={endDate.value} 
-              xPosition={endX.value} 
-              isStart={false}
-            />
-          )}
+        
         </View>
       </GestureDetector>
     </View>
