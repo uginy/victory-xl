@@ -1,5 +1,5 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { StyleSheet, View, TextInput } from 'react-native';
 import { CartesianChart, Line as VictoryLine } from 'victory-native';
 import dayjs from 'dayjs';
 import utc from 'dayjs/plugin/utc';
@@ -7,7 +7,7 @@ import { useFont } from '@shopify/react-native-skia';
 import inter from "../assets/inter-medium.ttf";
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { useChartPressState } from 'victory-native';
-import { useSharedValue, useAnimatedStyle } from 'react-native-reanimated';
+import { useSharedValue, useAnimatedStyle, SharedValue, useAnimatedProps } from 'react-native-reanimated';
 import Animated from 'react-native-reanimated';
 
 dayjs.extend(utc);
@@ -62,6 +62,42 @@ const generateSampleData = (points: number): LogAnalog[] => {
 
 // Generate 100 points for each of 3 sensors
 const sampleData = generateSampleData(20);
+
+function SelectionLabels({ 
+  endX,
+  state,
+  chartBounds
+}: { 
+  endX: SharedValue<number | null>,
+  state: { y: { valueAvg: number }},
+  chartBounds: { left: number, right: number }
+}) {
+  const ReanimatedText = Animated.createAnimatedComponent(TextInput);
+
+  const labelStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: -20 }],
+    padding: 4,
+    zIndex: 1000,
+    borderRadius: 4,
+    borderWidth: 1,
+    borderColor: '#ddd',
+    height: 20
+  }));
+
+  const animatedProps = useAnimatedProps(() => ({
+    value: endX.value?.toString() ?? ''
+  }));
+
+  return (
+    <Animated.View style={labelStyle}>
+      <ReanimatedText 
+        animatedProps={animatedProps}
+        style={{ fontSize: 14, color: '#000', height: 20 }}
+      />
+    </Animated.View>
+  );
+}
+
 
 export default function App() {
   const selected = {
@@ -209,7 +245,6 @@ export default function App() {
     })
     .onUpdate((event) => {
       if (isSelecting.value) {
-        // Clamp the update position within chart bounds
         const xPos = Math.max(
           0,
           Math.min(
@@ -219,10 +254,8 @@ export default function App() {
         );
         
         endX.value = xPos;
-        const newEndDate = getDateFromXPosition(xPos);
-        if (newEndDate) {
-          endDate.value = newEndDate;
-        }
+        console.log('Updated endX:', xPos);
+        console.log('Current state:', state.y.valueAvg.value.value);
       }
     })
     .onEnd(() => {
@@ -251,7 +284,6 @@ export default function App() {
             axisOptions={{
               font,
               formatXLabel: (value) => dayjs(value).format('DD-MM HH:mm'),
-              // tickCount: { x: 7, y: 5 },
               tickValues: { y: 
                 Array.from({ length: 6 }, (_, i) => {
                   const maxValue = sampleData[0]?.max ?? 0;
@@ -285,7 +317,11 @@ export default function App() {
           <Animated.View style={selectionOverlayStyle} />
           <Animated.View style={leftHandleStyle} />
           <Animated.View style={rightHandleStyle} />
-
+          <SelectionLabels 
+            endX={endX} 
+            state={state}
+            chartBounds={chartBoundsRef.current}
+          />
         </View>
       </GestureDetector>
     </View>
