@@ -12,6 +12,9 @@ import Animated from 'react-native-reanimated';
 
 dayjs.extend(utc);
 
+const FORMAT_DATE = 'DD.MM.YYYY';
+const FORMAT_DATETIME = 'DD.MM.YYYY HH:mm:ss';
+
 type LogAnalog = {
   dateTimeLocal: string;
   entityId: string;
@@ -51,13 +54,14 @@ const generateSampleData = (points: number): LogAnalog[] => {
   return data;
 };
 
-const sampleData = generateSampleData(20) as LogAnalog[];
+const sampleData = generateSampleData(30) as LogAnalog[];
+console.log();
 
 const getDateFromXPosition = (
   xPos: number,
   chartWidth: number,
   data: LogAnalog[],
-  format = 'DD.MM.YYYY'
+  format = FORMAT_DATETIME
 ): string | null => {
 
   const normalizedX = Math.max(0, Math.min(xPos, chartWidth));
@@ -73,6 +77,8 @@ const getDateFromXPosition = (
 
 function SelectionLabels({
   startX,
+  defaultStartDate,
+  defaultEndDate,
   endX,
   chartBounds,
   data
@@ -80,7 +86,9 @@ function SelectionLabels({
   startX: SharedValue<number | null>,
   endX: SharedValue<number | null>,
   chartBounds: { left: number; right: number; top: number; bottom: number; },
-  data: LogAnalog[]
+  data: LogAnalog[],
+  defaultStartDate: string,
+  defaultEndDate: string
 }) {
   const ReanimatedText = Animated.createAnimatedComponent(TextInput);
 
@@ -89,7 +97,6 @@ function SelectionLabels({
   }));
 
   const endAnimatedProps = useAnimatedProps(() => ({
-    // value: getDateFromXPosition(endX?.value ?? 0, chartBounds.right - chartBounds.left, data) ?? ''
     value: getDateFromXPosition(endX?.value ?? 0, chartBounds.right - chartBounds.left, data) ?? ''
   }));
 
@@ -137,6 +144,62 @@ function SelectionLabels({
   );
 }
 
+function SelectedRange({
+  startX,
+  endX,
+  chartBounds,
+  data
+}: {
+  startX: SharedValue<number | null>,
+  endX: SharedValue<number | null>,
+  chartBounds: { left: number; right: number; top: number; bottom: number; },
+  data: LogAnalog[]
+}) {
+  const ReanimatedText = Animated.createAnimatedComponent(TextInput);
+
+  const startAnimatedProps = useAnimatedProps(() => ({
+    value: getDateFromXPosition(startX?.value ?? 0, chartBounds.right - chartBounds.left, data) ?? ''
+  }));
+
+  const endAnimatedProps = useAnimatedProps(() => ({
+    // value: getDateFromXPosition(endX?.value ?? 0, chartBounds.right - chartBounds.left, data) ?? ''
+    value: getDateFromXPosition(endX?.value ?? 0, chartBounds.right - chartBounds.left, data) ?? ''
+  }));
+
+  const startLabelStyle = useAnimatedStyle(() => ({
+    padding: 4,
+    zIndex: 1000,
+    height: 20,
+    opacity: startX.value !== null ? 1 : 0
+  }));
+
+  const endLabelStyle = useAnimatedStyle(() => ({
+    padding: 4,
+    zIndex: 1000,
+    height: 20,
+    opacity: endX.value !== null ? 1 : 0
+  }));
+
+  return (
+    <View style={{ flexDirection: 'row', gap: 10 }}>
+      <Animated.View style={startLabelStyle}>
+        <ReanimatedText
+          animatedProps={startAnimatedProps}
+          style={{ fontSize: 18, fontWeight: '600', color: '#000', height: 20, minWidth: 80, borderWidth: 0 }}
+          editable={false}
+        />
+      </Animated.View>
+      <Animated.View style={endLabelStyle}>
+        <ReanimatedText
+          animatedProps={endAnimatedProps}
+          style={{ fontSize: 18, fontWeight: '600', color: '#000', height: 20, minWidth: 80, borderWidth: 0 }}
+          editable={false}
+        />
+      </Animated.View>
+    </View>
+  );
+}
+
 type DragMode = 'none' | 'left' | 'right' | 'new' | 'move';
 
 
@@ -157,15 +220,15 @@ function getHandlePositions(
 
 const SelectedDateLabels = ({ start, end }: { start: Date; end: Date }) => (
   <View style={styles.dateLabelsContainer}>
-    <Text style={styles.dateLabel}>Start: {dayjs(start).format('DD.MM.YYYY')}</Text>
-    <Text style={styles.dateLabel}>End: {dayjs(end).format('DD.MM.YYYY')}</Text>
+    <Text style={styles.dateLabel}>Start: {dayjs(start).format(FORMAT_DATE)}</Text>
+    <Text style={styles.dateLabel}>End: {dayjs(end).format(FORMAT_DATE)}</Text>
   </View>
 );
 
 export default function App() {
   const selected = {
-    start: dayjs().subtract(8, 'd').startOf('day').toDate(),
-    end: dayjs().subtract(5, 'd').startOf('day').toDate(),
+    start: dayjs(sampleData[sampleData.length - 1].dateTimeLocal).subtract(7, 'd').startOf('day').toDate(),
+    end: dayjs(sampleData[sampleData.length - 1].dateTimeLocal).toDate(),
   }
   const font = useFont(inter, 12);
   const { state } = useChartPressState<{ x: string; y: Record<"valueAvg", number> }>({
@@ -447,10 +510,10 @@ export default function App() {
   useEffect(() => {
     if(!selected || !sampleData?.length) return;
     startX.value = getXPositionFromDate(selected.start);
-    endX.value = getXPositionFromDate(selected.end);
+    endX.value = getXPositionFromDate(selected.end) - chartBoundsRef.current.left;
     
-    startDate.value = dayjs(selected.start).format("DD.MM.YYYY");
-    endDate.value = dayjs(selected.end).format("DD.MM.YYYY");
+    startDate.value = dayjs(selected.start).format(FORMAT_DATE);
+    endDate.value = dayjs(selected.end).format(FORMAT_DATE);
 
     
   }, [selected, sampleData]);
@@ -521,14 +584,20 @@ export default function App() {
           <Animated.View style={selectionOverlayStyle} />
           <Animated.View style={leftHandleStyle} />
           <Animated.View style={rightHandleStyle} />
-          <SelectionLabels
+          {/* <SelectionLabels
+            startX={startX}
+            endX={endX}
+            chartBounds={chartBoundsRef.current}
+            data={sampleData}
+          /> */}
+        </View>
+      </GestureDetector>
+      <SelectedRange
             startX={startX}
             endX={endX}
             chartBounds={chartBoundsRef.current}
             data={sampleData}
           />
-        </View>
-      </GestureDetector>
     </View>
   );
 }
