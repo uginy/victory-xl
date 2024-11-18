@@ -143,7 +143,7 @@ function SelectionLabels({
 // Add this type definition near the top of the file
 type DragMode = 'none' | 'left' | 'right' | 'new';
 
-// Добавим функцию для определения хендлеров по их текущей позиции
+
 function getHandlePositions(
   startX: SharedValue<number | null>,
   endX: SharedValue<number | null>
@@ -195,6 +195,9 @@ export default function App() {
   const heightBounds = Math.abs(chartBoundsRef.current.bottom - chartBoundsRef.current.top);
   // Shared values for range selection
 
+  const getDatePos = (pos: any) => getDateFromXPosition(pos ?? 0, chartBoundsRef.current.right - chartBoundsRef.current.left, sampleData)
+
+  
   const startX = useSharedValue<number | null>(null);
   const endX = useSharedValue<number | null>(null);
   const isSelecting = useSharedValue<DragMode>('none');
@@ -207,10 +210,6 @@ export default function App() {
   // Add a state to track chartBounds changes
   const [chartLeft, setChartLeft] = useState(0);
 
-  useEffect(() => {
-    startX.value = getXPositionFromDate(selected.start);
-    endX.value = getXPositionFromDate(selected.end);
-  }, [selected]);
 
   // Enhanced selection overlay style with more visible defaults
   const selectionOverlayStyle = useAnimatedStyle(() => {
@@ -292,6 +291,8 @@ export default function App() {
       const isNearLeftHandle = Math.abs(xPos - left) < handleWidth;
       const isNearRightHandle = Math.abs(xPos - right) < handleWidth;
 
+      const currentDate = getDateFromXPosition(xPos, chartBoundsRef.current.right - chartBoundsRef.current.left, sampleData);
+
       if (isNearLeftHandle) {
         isSelecting.value = 'left';
       } else if (isNearRightHandle) {
@@ -300,10 +301,18 @@ export default function App() {
         isSelecting.value = 'new';
         startX.value = xPos;
         endX.value = xPos;
+        if (currentDate) {
+          startDate.value = currentDate
+          endDate.value = currentDate
+        }
       } else {
         isSelecting.value = 'new';
         startX.value = xPos;
         endX.value = xPos;
+        if (currentDate) {
+          startDate.value = currentDate
+          endDate.value = currentDate
+        }
       }
     })
     .onUpdate((event) => {
@@ -318,31 +327,53 @@ export default function App() {
       );
 
       const { left, right, isStartLeft } = getHandlePositions(startX, endX);
+      const currentDate = getDateFromXPosition(xPos, chartBoundsRef.current.right - chartBoundsRef.current.left, sampleData);
 
       switch (isSelecting.value) {
         case 'left':
-          // Обновляем значение того хендлера, который сейчас слева
-          if (isStartLeft) {
-            if (xPos < right) startX.value = xPos;
-          } else {
-            if (xPos < right) endX.value = xPos;
+          if (currentDate) {
+            if (isStartLeft) {
+              if (xPos < right) {
+                startX.value = xPos;
+                startDate.value = currentDate
+              }
+            } else {
+              if (xPos < right) {
+                endX.value = xPos;
+                endDate.value = currentDate
+              }
+            }
           }
           break;
         case 'right':
-          // Обновляем значение того хендлера, который сейчас справа
-          if (isStartLeft) {
-            if (xPos > left) endX.value = xPos;
-          } else {
-            if (xPos > left) startX.value = xPos;
+          if (currentDate) {
+            if (isStartLeft) {
+              if (xPos > left) {
+                endX.value = xPos;
+                endDate.value = currentDate
+              }
+            } else {
+              if (xPos > left) {
+                startX.value = xPos;
+                startDate.value = currentDate
+              }
+            }
           }
           break;
         case 'new':
-          endX.value = xPos;
+          if (currentDate) {
+            endX.value = xPos;
+            endDate.value = currentDate
+          }
           break;
       }
     })
     .onEnd(() => {
       isSelecting.value = 'none';
+      console.log('Selection range:', {
+        start: startDate.value ? startDate.value : null,
+        end: endDate.value ? endDate.value: null
+      });
     })
     .minDistance(0);
 
@@ -355,6 +386,14 @@ export default function App() {
     });
   }
 
+  useEffect(() => {
+    startX.value = getXPositionFromDate(selected.start);
+    startDate.value = dayjs(selected.start).format("DD.MM.YYYY");
+  
+    endX.value = getXPositionFromDate(selected.end);
+    endDate.value = dayjs(selected.end).format("DD.MM.YYYY");
+  }, [selected]);
+  
   useEffect(() => {
     setChartLeft(chartBoundsRef.current.left);
   }, [chartBoundsRef.current.left]);
