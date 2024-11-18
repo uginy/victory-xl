@@ -1,11 +1,11 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { StyleSheet, View, TextInput, Text } from 'react-native';
+import { StyleSheet, View, TextInput, Text, Platform } from 'react-native';
 import { CartesianChart, Line as VictoryLine } from 'victory-native';
 import dayjs from 'dayjs';
 import utc from 'dayjs/plugin/utc';
 import { useFont } from '@shopify/react-native-skia';
 import inter from "../assets/inter-medium.ttf";
-import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useChartPressState } from 'victory-native';
 import { useSharedValue, useAnimatedStyle, SharedValue, useAnimatedProps } from 'react-native-reanimated';
 import Animated from 'react-native-reanimated';
@@ -57,12 +57,12 @@ const generateSampleData = (points: number): LogAnalog[] => {
 const sampleData = generateSampleData(30) as LogAnalog[];
 console.log();
 
-const getDateFromXPosition = (
+function getDateFromXPosition (
   xPos: number,
   chartWidth: number,
   data: LogAnalog[],
   format = FORMAT_DATETIME
-): string | null => {
+): string | null  {
 
   const normalizedX = Math.max(0, Math.min(xPos, chartWidth));
   const percentage = normalizedX / chartWidth;
@@ -237,6 +237,8 @@ export default function App() {
   });
   const chartBoundsRef = useRef({ left: 0, right: 0, top: 0, bottom: 0 });
 
+  const [zoomLevel, setZoomLevel] = useState(1);
+
   const getXPositionFromDate = (date: Date) => {
     if (!date) return null;
 
@@ -259,10 +261,6 @@ export default function App() {
 
   const widthBounds = Math.abs(chartBoundsRef.current.right - chartBoundsRef.current.left);
   const heightBounds = Math.abs(chartBoundsRef.current.bottom - chartBoundsRef.current.top);
-
-  const getDatePos = (pos: any) => getDateFromXPosition(pos ?? 0, chartBoundsRef.current.right - chartBoundsRef.current.left, sampleData)
-
-
   const startX = useSharedValue<number | null>(null);
   const endX = useSharedValue<number | null>(null);
   const isSelecting = useSharedValue<DragMode>('none');
@@ -280,7 +278,7 @@ export default function App() {
         width: widthBounds,
         height: heightBounds,
         backgroundColor: 'transparent',
-        cursor: 'default',
+        ...(Platform.OS === 'web' ? { cursor: 'default' } : {}),
       };
     }
 
@@ -299,7 +297,7 @@ export default function App() {
       borderRightWidth: 1,
       borderColor: 'rgba(0, 122, 255, 0.8)',
       zIndex: 10,
-      cursor: isSelecting.value === 'move' ? 'move' : 'default',
+      ...(Platform.OS === 'web' ? { cursor: isSelecting.value === 'move' ? 'move' : 'default' } : {}),
     };
   }, [chartLeft]);
 
@@ -314,10 +312,10 @@ export default function App() {
     borderRadius: 6,
     opacity: startX.value !== null ? 1 : 0,
     zIndex: 11,
-    cursor: 'ew-resize',
     transform: [
       { scale: isSelecting.value === 'left' ? 1.1 : 1 }
-    ]
+    ],
+    ...(Platform.OS === 'web' ? { cursor: 'ew-resize' } : {}),
   }));
 
   const rightHandleStyle = useAnimatedStyle(() => ({
@@ -331,10 +329,11 @@ export default function App() {
     borderRadius: 6,
     opacity: endX.value !== null ? 1 : 0,
     zIndex: 11,
-    cursor: 'ew-resize',
+    // cursor: 'ew-resize',
     transform: [
       { scale: isSelecting.value === 'right' ? 1.1 : 1 }
-    ]
+    ],
+    ...(Platform.OS === 'web' ? { cursor: 'ew-resize' } : {}),
   }));
 
   const initialTouchX = useSharedValue(0);
@@ -508,14 +507,14 @@ export default function App() {
   }
 
   useEffect(() => {
-    if(!selected || !sampleData?.length) return;
+    if (!selected || !sampleData?.length) return;
     startX.value = getXPositionFromDate(selected.start);
     endX.value = getXPositionFromDate(selected.end) - chartBoundsRef.current.left;
-    
+
     startDate.value = dayjs(selected.start).format(FORMAT_DATE);
     endDate.value = dayjs(selected.end).format(FORMAT_DATE);
 
-    
+
   }, [selected, sampleData]);
 
   useEffect(() => {
@@ -527,78 +526,96 @@ export default function App() {
       width: '90%',
       position: 'relative',
       marginBottom: 50,
-      cursor: 'default',
+      ...(Platform.OS === 'web' ? { cursor: 'default' } : {}),
     },
   });
 
+  const pinchGesture = Gesture.Pinch()
+    .onUpdate((event) => {
+      if (event.scale) {
+        setZoomLevel((prevZoom) => Math.max(0.1, prevZoom * event.scale));
+      }
+    })
+    .onEnd(() => {
+      setZoomLevel((prevZoom) => Math.max(0.1, prevZoom));
+    });
+
+  const combinedGesture = Gesture.Simultaneous(pinchGesture, gesture);
+
+  useEffect(() => {
+    // Update the chart's domain based on the zoom level
+    // You can adjust the logic here to fit your charting library's requirements
+  }, [zoomLevel]);
+
   return (
-    <View style={styles.container}>
-      <SelectedDateLabels start={selected.start} end={selected.end} />
-      <GestureDetector gesture={gesture}>
-        <View style={[styles.chartContainer, chartContainerStyle.container]}>
-          <CartesianChart
-            data={sampleData}
-            domainPadding={{ top: 0, bottom: 0, left: 0, right: 0 }}
-            xKey="dateTimeLocal"
-            yKeys={["valueAvg"]}
-            axisOptions={{
-              font,
-              formatXLabel: (value) => {
-                return dayjs(value).format('DD.MM')
-              },
-              tickCount: {
-                x: 10,
-                y: 6
-              },
-              tickValues: {
-                y:
-                  Array.from({ length: 6 }, (_, i) => {
+    <GestureHandlerRootView style={{ flex: 1, height: '100%' }}>
+      <View style={styles.container}>
+        <SelectedDateLabels start={selected.start} end={selected.end} />
+        <GestureDetector gesture={combinedGesture}>
+          <View style={[styles.chartContainer, chartContainerStyle.container]}>
+            <CartesianChart
+              data={sampleData}
+              domainPadding={{ top: 0, bottom: 0, left: 0, right: 0 }}
+              xKey="dateTimeLocal"
+              yKeys={["valueAvg"]}
+              axisOptions={{
+                font,
+                formatXLabel: (value) => {
+                  return dayjs(value).format('DD.MM')
+                },
+                tickCount: {
+                  x: 10,
+                  y: 6
+                },
+                tickValues: {
+                  y: Array.from({ length: 6 }, (_, i) => {
                     const maxValue = sampleData[0]?.max ?? 0;
                     const step = Math.ceil(maxValue / 25) * 5;
                     return i * step;
                   }),
-                x: xTicks()
-              },
-            }}
-            padding={{ top: 0, bottom: 0, left: 0, right: 0 }}
-            chartPressState={[state]}
-          >
-            {({ points, chartBounds }) => {
-              chartBoundsRef.current = chartBounds;
-              return (
-                <>
-                  {sampleData.map((_, i) => (
-                    <React.Fragment key={i}>
-                      <VictoryLine
-                        points={points.valueAvg || []}
-                        color={'#000000'}
-                        strokeWidth={2}
-                      />
-                    </React.Fragment>
-                  ))}
-                </>
-              );
-            }}
-          </CartesianChart>
+                  x: xTicks()
+                },
+              }}
+              padding={{ top: 0, bottom: 0, left: 0, right: 0 }}
+              chartPressState={[state]}
+            >
+              {({ points, chartBounds }) => {
+                chartBoundsRef.current = chartBounds;
+                return (
+                  <>
+                    {sampleData.map((_, i) => (
+                      <React.Fragment key={i}>
+                        <VictoryLine
+                          points={points.valueAvg || []}
+                          color={'#000000'}
+                          strokeWidth={2}
+                        />
+                      </React.Fragment>
+                    ))}
+                  </>
+                );
+              }}
+            </CartesianChart>
 
-          <Animated.View style={selectionOverlayStyle} />
-          <Animated.View style={leftHandleStyle} />
-          <Animated.View style={rightHandleStyle} />
-          {/* <SelectionLabels
+            <Animated.View style={selectionOverlayStyle} />
+            <Animated.View style={leftHandleStyle} />
+            <Animated.View style={rightHandleStyle} />
+            {/* <SelectionLabels
             startX={startX}
             endX={endX}
             chartBounds={chartBoundsRef.current}
             data={sampleData}
           /> */}
-        </View>
-      </GestureDetector>
-      <SelectedRange
-            startX={startX}
-            endX={endX}
-            chartBounds={chartBoundsRef.current}
-            data={sampleData}
-          />
-    </View>
+          </View>
+        </GestureDetector>
+        <SelectedRange
+          startX={startX}
+          endX={endX}
+          chartBounds={chartBoundsRef.current}
+          data={sampleData}
+        />
+      </View>
+    </GestureHandlerRootView>
   );
 }
 
