@@ -89,6 +89,7 @@ function SelectionLabels({
   }));
 
   const endAnimatedProps = useAnimatedProps(() => ({
+    // value: getDateFromXPosition(endX?.value ?? 0, chartBounds.right - chartBounds.left, data) ?? ''
     value: getDateFromXPosition(endX?.value ?? 0, chartBounds.right - chartBounds.left, data) ?? ''
   }));
 
@@ -154,7 +155,6 @@ function getHandlePositions(
   };
 }
 
-// Компонент для отображения выбранных дат
 const SelectedDateLabels = ({ start, end }: { start: Date; end: Date }) => (
   <View style={styles.dateLabelsContainer}>
     <Text style={styles.dateLabel}>Start: {dayjs(start).format('DD.MM.YYYY')}</Text>
@@ -445,12 +445,15 @@ export default function App() {
   }
 
   useEffect(() => {
+    if(!selected || !sampleData?.length) return;
     startX.value = getXPositionFromDate(selected.start);
-    startDate.value = dayjs(selected.start).format("DD.MM.YYYY");
-
     endX.value = getXPositionFromDate(selected.end);
+    
+    startDate.value = dayjs(selected.start).format("DD.MM.YYYY");
     endDate.value = dayjs(selected.end).format("DD.MM.YYYY");
-  }, [selected]);
+
+    
+  }, [selected, sampleData]);
 
   useEffect(() => {
     setChartLeft(chartBoundsRef.current.left);
