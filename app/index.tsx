@@ -12,7 +12,6 @@ import Animated from 'react-native-reanimated';
 
 dayjs.extend(utc);
 
-// Define the LogAnalog type
 type LogAnalog = {
   dateTimeLocal: string;
   entityId: string;
@@ -26,7 +25,6 @@ type LogAnalog = {
   max?: number;
 };
 
-// Function to generate sample data
 const generateSampleData = (points: number): LogAnalog[] => {
   const data: LogAnalog[] = [];
   const startDate = dayjs().subtract(10, 'd').startOf('day').toDate();
@@ -53,10 +51,8 @@ const generateSampleData = (points: number): LogAnalog[] => {
   return data;
 };
 
-// Generate 100 points for each of 3 sensors
 const sampleData = generateSampleData(20) as LogAnalog[];
 
-// Function to convert x position to date
 const getDateFromXPosition = (
   xPos: number,
   chartWidth: number,
@@ -140,7 +136,6 @@ function SelectionLabels({
   );
 }
 
-// Add this type definition near the top of the file
 type DragMode = 'none' | 'left' | 'right' | 'new' | 'move';
 
 
@@ -170,7 +165,7 @@ export default function App() {
     y: { valueAvg: 0 }
   });
   const chartBoundsRef = useRef({ left: 0, right: 0, top: 0, bottom: 0 });
-  // get position from selected date
+
   const getXPositionFromDate = (date: Date) => {
     if (!date) return null;
 
@@ -193,7 +188,6 @@ export default function App() {
 
   const widthBounds = Math.abs(chartBoundsRef.current.right - chartBoundsRef.current.left);
   const heightBounds = Math.abs(chartBoundsRef.current.bottom - chartBoundsRef.current.top);
-  // Shared values for range selection
 
   const getDatePos = (pos: any) => getDateFromXPosition(pos ?? 0, chartBoundsRef.current.right - chartBoundsRef.current.left, sampleData)
 
@@ -202,16 +196,11 @@ export default function App() {
   const endX = useSharedValue<number | null>(null);
   const isSelecting = useSharedValue<DragMode>('none');
 
-  // In the main App component, add these new pieces of state
-  const startDate = useSharedValue<Date | null>(null);
-  const endDate = useSharedValue<Date | null>(null);
+  const startDate = useSharedValue<Date | string | null>(null);
+  const endDate = useSharedValue<Date | string | null>(null);
 
-
-  // Add a state to track chartBounds changes
   const [chartLeft, setChartLeft] = useState(0);
 
-
-  // Enhanced selection overlay style with more visible defaults
   const selectionOverlayStyle = useAnimatedStyle(() => {
     if (startX.value === null || endX.value === null) {
       return {
@@ -220,6 +209,7 @@ export default function App() {
         width: widthBounds,
         height: heightBounds,
         backgroundColor: 'transparent',
+        cursor: 'default',
       };
     }
 
@@ -238,10 +228,10 @@ export default function App() {
       borderRightWidth: 1,
       borderColor: 'rgba(0, 122, 255, 0.8)',
       zIndex: 10,
+      cursor: isSelecting.value === 'move' ? 'move' : 'default',
     };
   }, [chartLeft]);
 
-  // Simplified handle styles for debugging
   const leftHandleStyle = useAnimatedStyle(() => ({
     position: 'absolute',
     left: chartBoundsRef.current.left + (startX.value !== null ? Math.min(startX.value, endX.value ?? 0) - 6 : 0),
@@ -249,12 +239,13 @@ export default function App() {
     width: 12,
     height: 40,
     marginTop: -20,
-    backgroundColor: isSelecting.value === 'left' ? '#0056b3' : '#007AFF', // Darker when dragging
+    backgroundColor: isSelecting.value === 'left' ? '#0056b3' : '#007AFF',
     borderRadius: 6,
     opacity: startX.value !== null ? 1 : 0,
     zIndex: 11,
+    cursor: 'ew-resize',
     transform: [
-      { scale: isSelecting.value === 'left' ? 1.1 : 1 } // Slightly larger when dragging
+      { scale: isSelecting.value === 'left' ? 1.1 : 1 }
     ]
   }));
 
@@ -265,20 +256,19 @@ export default function App() {
     width: 12,
     height: 40,
     marginTop: -20,
-    backgroundColor: isSelecting.value === 'right' ? '#0056b3' : '#007AFF', // Darker when dragging
+    backgroundColor: isSelecting.value === 'right' ? '#0056b3' : '#007AFF',
     borderRadius: 6,
     opacity: endX.value !== null ? 1 : 0,
     zIndex: 11,
+    cursor: 'ew-resize',
     transform: [
-      { scale: isSelecting.value === 'right' ? 1.1 : 1 } // Slightly larger when dragging
+      { scale: isSelecting.value === 'right' ? 1.1 : 1 }
     ]
   }));
 
-  // Добавим новые shared values для отслеживания позиции клика
   const initialTouchX = useSharedValue(0);
   const initialSelectionOffset = useSharedValue(0);
 
-  // Обновляем обработчик gesture
   const gesture = Gesture.Pan()
     .onBegin((event) => {
       const xPos = Math.max(
@@ -289,7 +279,6 @@ export default function App() {
         )
       );
 
-      // Check if we're near either handle or in selection area
       const handleWidth = 20;
       const { left, right } = getHandlePositions(startX, endX);
 
@@ -297,7 +286,6 @@ export default function App() {
       const isNearRightHandle = Math.abs(xPos - right) < handleWidth;
       const isInSelection = xPos > left + handleWidth && xPos < right - handleWidth;
 
-      // Сохраняем начальную позицию клика и смещение относительно левого края выделения
       initialTouchX.value = xPos;
       initialSelectionOffset.value = xPos - left;
 
@@ -347,14 +335,20 @@ export default function App() {
 
           const selectionWidth = Math.abs(endX.value - startX.value);
 
-          // Вычисляем новую позицию с учетом начального смещения клика
-          const newLeft = Math.max(0, xPos - initialSelectionOffset.value);
-          const newRight = Math.min(
-            chartBoundsRef.current.right - chartBoundsRef.current.left,
-            newLeft + selectionWidth
-          );
+          let newLeft = xPos - initialSelectionOffset.value;
+          let newRight = newLeft + selectionWidth;
 
-          // Проверяем, не выходим ли за границы
+          if (newRight > chartBoundsRef.current.right - chartBoundsRef.current.left) {
+            newRight = chartBoundsRef.current.right - chartBoundsRef.current.left;
+            newLeft = newRight - selectionWidth;
+          }
+
+          if (newLeft < 0) {
+            newLeft = 0;
+            newRight = selectionWidth;
+          }
+
+
           if (newRight <= chartBoundsRef.current.right - chartBoundsRef.current.left && newLeft >= 0) {
             if (isStartLeft) {
               startX.value = newLeft;
@@ -377,11 +371,11 @@ export default function App() {
 
             if (newStartDate && newEndDate) {
               if (isStartLeft) {
-                startDate.value = newStartDate
-                endDate.value = newEndDate
+                startDate.value = newStartDate;
+                endDate.value = newEndDate;
               } else {
-                endDate.value = newStartDate
-                startDate.value = newEndDate
+                endDate.value = newStartDate;
+                startDate.value = newEndDate;
               }
             }
           }
@@ -454,10 +448,19 @@ export default function App() {
     setChartLeft(chartBoundsRef.current.left);
   }, [chartBoundsRef.current.left]);
 
+  const chartContainerStyle = StyleSheet.create({
+    container: {
+      width: '90%',
+      position: 'relative',
+      marginBottom: 50,
+      cursor: 'default',
+    },
+  });
+
   return (
     <View style={styles.container}>
       <GestureDetector gesture={gesture}>
-        <View style={styles.chartContainer}>
+        <View style={[styles.chartContainer, chartContainerStyle.container]}>
           <CartesianChart
             data={sampleData}
             domainPadding={{ top: 0, bottom: 0, left: 0, right: 0 }}
