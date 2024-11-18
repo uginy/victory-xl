@@ -106,7 +106,7 @@ export default function App() {
   // In the main App component, add these new pieces of state
   const startDate = useSharedValue<Date | null>(null);
   const endDate = useSharedValue<Date | null>(null);
-  console.log(chartBoundsRef.current.left);
+
 
   // Function to convert x position to date
   const getDateFromXPosition = (xPos: number): Date | null => {
@@ -252,7 +252,14 @@ export default function App() {
               font,
               formatXLabel: (value) => dayjs(value).format('DD-MM HH:mm'),
               // tickCount: { x: 7, y: 5 },
-              tickValues: { y: [0, sampleData[0]?.max], x: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10] },
+              tickValues: { y: 
+                Array.from({ length: 6 }, (_, i) => {
+                  const maxValue = sampleData[0]?.max ?? 0;
+                  const step = Math.ceil(maxValue / 25) * 5;
+                  return i * step;
+                }),
+                x: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10] 
+              },
             }}
             padding={{ top: 0, bottom: 0, left: 0, right: 0 }}
             chartPressState={[state]}
