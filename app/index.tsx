@@ -64,37 +64,60 @@ const generateSampleData = (points: number): LogAnalog[] => {
 const sampleData = generateSampleData(20);
 
 function SelectionLabels({ 
+  startX,
   endX,
-  state,
-  chartBounds
 }: { 
+  startX: SharedValue<number | null>,
   endX: SharedValue<number | null>,
-  state: { y: { valueAvg: number }},
-  chartBounds: { left: number, right: number }
 }) {
   const ReanimatedText = Animated.createAnimatedComponent(TextInput);
 
-  const labelStyle = useAnimatedStyle(() => ({
+  // Create styles for both start and end labels
+  const startLabelStyle = useAnimatedStyle(() => ({
+    position: 'absolute',
+    left: startX.value ?? 0,
     transform: [{ translateX: -20 }],
     padding: 4,
     zIndex: 1000,
     borderRadius: 4,
-    borderWidth: 1,
-    borderColor: '#ddd',
-    height: 20
+    height: 20,
+    opacity: startX.value !== null ? 1 : 0,
   }));
 
-  const animatedProps = useAnimatedProps(() => ({
+  const endLabelStyle = useAnimatedStyle(() => ({
+    position: 'absolute',
+    left: endX.value ?? 0,
+    transform: [{ translateX: -20 }],
+    padding: 4,
+    zIndex: 1000,
+    borderRadius: 4,
+    height: 20,
+    opacity: endX.value !== null ? 1 : 0,
+  }));
+
+  const startAnimatedProps = useAnimatedProps(() => ({
+    value: startX.value?.toString() ?? ''
+  }));
+
+  const endAnimatedProps = useAnimatedProps(() => ({
     value: endX.value?.toString() ?? ''
   }));
 
   return (
-    <Animated.View style={labelStyle}>
-      <ReanimatedText 
-        animatedProps={animatedProps}
-        style={{ fontSize: 14, color: '#000', height: 20 }}
-      />
-    </Animated.View>
+    <>
+      <Animated.View style={startLabelStyle}>
+        <ReanimatedText 
+          animatedProps={startAnimatedProps}
+          style={{ fontSize: 14, color: '#000', height: 20 }}
+        />
+      </Animated.View>
+      <Animated.View style={endLabelStyle}>
+        <ReanimatedText 
+          animatedProps={endAnimatedProps}
+          style={{ fontSize: 14, color: '#000', height: 20 }}
+        />
+      </Animated.View>
+    </>
   );
 }
 
@@ -318,6 +341,7 @@ export default function App() {
           <Animated.View style={leftHandleStyle} />
           <Animated.View style={rightHandleStyle} />
           <SelectionLabels 
+            startX={startX}
             endX={endX} 
             state={state}
             chartBounds={chartBoundsRef.current}
