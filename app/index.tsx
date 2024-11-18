@@ -60,8 +60,9 @@ const sampleData = generateSampleData(20) as LogAnalog[];
 const getDateFromXPosition = (
   xPos: number,
   chartWidth: number,
-  data: []
-): Date | null => {
+  data: LogAnalog[],
+  format: string = 'DD.MM.YYYY HH:mm'
+): string | null => {
 
   const normalizedX = Math.max(0, Math.min(xPos, chartWidth));
   const percentage = normalizedX / chartWidth;
@@ -71,7 +72,7 @@ const getDateFromXPosition = (
     .sort((a, b) => new Date(a.dateTimeLocal).getTime() - new Date(b.dateTimeLocal).getTime());
 
   const index = Math.floor(percentage * (sortedDates.length - 1));
-  return index >= 0 ? new Date(sortedDates[index].dateTimeLocal) : null;
+  return index >= 0 ? dayjs(sortedDates[index].dateTimeLocal).format(format) : null;
 };
 
 function SelectionLabels({
@@ -88,11 +89,11 @@ function SelectionLabels({
   const ReanimatedText = Animated.createAnimatedComponent(TextInput);
 
   const startAnimatedProps = useAnimatedProps(() => ({
-    value: getDateFromXPosition(startX.value ?? 0, chartBounds.right - chartBounds.left, data)
+    value: getDateFromXPosition(startX?.value ?? 0, chartBounds.right - chartBounds.left, data) ?? ''
   }));
 
   const endAnimatedProps = useAnimatedProps(() => ({
-    value: getDateFromXPosition(endX.value ?? 0, chartBounds.right - chartBounds.left, data)
+    value: getDateFromXPosition(endX?.value ?? 0, chartBounds.right - chartBounds.left, data) ?? ''
   }));
 
   const startLabelStyle = useAnimatedStyle(() => ({
@@ -157,6 +158,8 @@ function SelectionLabels({
   );
 }
 
+// Add this type definition near the top of the file
+type DragMode = 'none' | 'left' | 'right' | 'new';
 
 export default function App() {
   const selected = {
@@ -196,7 +199,7 @@ export default function App() {
 
   const startX = useSharedValue<number | null>(null);
   const endX = useSharedValue<number | null>(null);
-  const isSelecting = useSharedValue(false);
+  const isSelecting = useSharedValue<DragMode>('none');
 
   // In the main App component, add these new pieces of state
   const startDate = useSharedValue<Date | null>(null);
@@ -249,10 +252,13 @@ export default function App() {
     width: 12,
     height: 40,
     marginTop: -20,
-    backgroundColor: '#007AFF',
+    backgroundColor: isSelecting.value === 'left' ? '#0056b3' : '#007AFF', // Darker when dragging
     borderRadius: 6,
     opacity: startX.value !== null ? 1 : 0,
     zIndex: 11,
+    transform: [
+      { scale: isSelecting.value === 'left' ? 1.1 : 1 } // Slightly larger when dragging
+    ]
   }));
 
   const rightHandleStyle = useAnimatedStyle(() => ({
@@ -262,15 +268,17 @@ export default function App() {
     width: 12,
     height: 40,
     marginTop: -20,
-    backgroundColor: '#007AFF',
+    backgroundColor: isSelecting.value === 'right' ? '#0056b3' : '#007AFF', // Darker when dragging
     borderRadius: 6,
     opacity: endX.value !== null ? 1 : 0,
     zIndex: 11,
+    transform: [
+      { scale: isSelecting.value === 'right' ? 1.1 : 1 } // Slightly larger when dragging
+    ]
   }));
 
   const gesture = Gesture.Pan()
     .onBegin((event) => {
-      // Clamp the initial position within chart bounds
       const xPos = Math.max(
         0,
         Math.min(
@@ -279,37 +287,74 @@ export default function App() {
         )
       );
 
-      isSelecting.value = true;
-      startX.value = xPos;
+      // Check if we're near either handle
+      const handleWidth = 20; // Increased touch area for handles
+      const isNearLeftHandle = startX.value !== null && 
+        Math.abs(xPos - startX.value) < handleWidth;
+      const isNearRightHandle = endX.value !== null && 
+        Math.abs(xPos - endX.value) < handleWidth;
+
+      if (isNearLeftHandle) {
+        isSelecting.value = 'left';
+      } else if (isNearRightHandle) {
+        isSelecting.value = 'right';
+      } else if (startX.value === null || endX.value === null) {
+        // Start new selection if there isn't one
+        isSelecting.value = 'new';
+        startX.value = xPos;
+        endX.value = xPos;
+      } else {
+        // Start new selection if clicking outside current selection
+        isSelecting.value = 'new';
+        startX.value = xPos;
+        endX.value = xPos;
+      }
 
       const initialDate = getDateFromXPosition(xPos, chartBoundsRef.current.right - chartBoundsRef.current.left, sampleData);
       if (initialDate) {
-        startDate.value = initialDate;
-        endDate.value = initialDate;
+        if (isSelecting.value === 'new') {
+          startDate.value = initialDate;
+          endDate.value = initialDate;
+        }
       }
     })
     .onUpdate((event) => {
-      if (isSelecting.value) {
-        const xPos = Math.max(
-          0,
-          Math.min(
-            event.x - chartBoundsRef.current.left,
-            chartBoundsRef.current.right - chartBoundsRef.current.left
-          )
-        );
+      if (isSelecting.value === 'none') return;
 
-        endX.value = xPos;
+      const xPos = Math.max(
+        0,
+        Math.min(
+          event.x - chartBoundsRef.current.left,
+          chartBoundsRef.current.right - chartBoundsRef.current.left
+        )
+      );
+
+      switch (isSelecting.value) {
+        case 'left':
+          // Don't allow left handle to go beyond right handle
+          if (endX.value !== null && xPos < endX.value) {
+            startX.value = xPos;
+          }
+          break;
+        case 'right':
+          // Don't allow right handle to go before left handle
+          if (startX.value !== null && xPos > startX.value) {
+            endX.value = xPos;
+          }
+          break;
+        case 'new':
+          endX.value = xPos;
+          break;
       }
     })
     .onEnd(() => {
-      isSelecting.value = false;
+      isSelecting.value = 'none';
       console.log('Selection range:', {
         start: startDate.value ? getDateFromXPosition(startX.value ?? 0, chartBoundsRef.current.right - chartBoundsRef.current.left, sampleData) : null,
         end: endDate.value ? getDateFromXPosition(endX.value ?? 0, chartBoundsRef.current.right - chartBoundsRef.current.left, sampleData) : null
       });
-
     })
-    .minDistance(0)
+    .minDistance(0);
 
   const xTicks = () => {
     const ticks = 10;
