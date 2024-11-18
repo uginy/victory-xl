@@ -23,9 +23,7 @@ type LogAnalog = {
   serial: string;
   unitName: string;
   valueAvg: number;
-  valueCurr: number;
-  valueMax: number;
-  valueMin: number;
+  max?: number;
 };
 
 // Add this type definition near the top of the file
@@ -39,10 +37,13 @@ type SelectionLabelProps = {
 const generateSampleData = (points: number): LogAnalog[] => {
   const data: LogAnalog[] = [];
   const startDate = dayjs().subtract(10, 'd').startOf('day').toDate();
-
+  let max = 0;
   for (let i = 0; i < points; i++) {
     const currentDate = dayjs(startDate).add(i, 'd')
-    const baseValue = Math.random() * 50 + 20; // Random base value between 20 and 70
+    const baseValue = Math.random() * 50 + 20;
+    if (max < baseValue) {
+      max = baseValue;
+    }
     data.push({
       dateTimeLocal: currentDate.format('YYYY-MM-DD[T]HH:mm:ss.SSS[Z]'),
       entityId: 'entity1',
@@ -52,17 +53,15 @@ const generateSampleData = (points: number): LogAnalog[] => {
       projectName: 'Project 1',
       serial: `S00${1}`,
       unitName: 'Celsius',
-      valueAvg: baseValue,
-      valueCurr: baseValue + Math.random() * 2 - 1, // Current value within ±1 of average
-      valueMax: baseValue + Math.random() * 2, // Max value up to 2 above average
-      valueMin: baseValue - Math.random() * 2, // Min value up to 2 below average
+      valueAvg: baseValue
     });
   }
+  data[0].max = max;
   return data;
 };
 
 // Generate 100 points for each of 3 sensors
-const sampleData = generateSampleData(10);
+const sampleData = generateSampleData(20);
 
 export default function App() {
   const selected = {
@@ -107,6 +106,7 @@ export default function App() {
   // In the main App component, add these new pieces of state
   const startDate = useSharedValue<Date | null>(null);
   const endDate = useSharedValue<Date | null>(null);
+  console.log(chartBoundsRef.current.left);
 
   // Function to convert x position to date
   const getDateFromXPosition = (xPos: number): Date | null => {
@@ -122,10 +122,14 @@ export default function App() {
     return index >= 0 ? dayjs(sortedDates[index].dateTimeLocal).format('YYYY-MM-DD[T]HH:mm:ss') : null;
   };
 
+  // Add a state to track chartBounds changes
+  const [chartLeft, setChartLeft] = useState(0);
+
   useEffect(() => {
     startX.value = getXPositionFromDate(selected.start);
     endX.value = getXPositionFromDate(selected.end);
   }, [selected]);
+
   // Enhanced selection overlay style with more visible defaults
   const selectionOverlayStyle = useAnimatedStyle(() => {
     if (startX.value === null || endX.value === null) {
@@ -138,7 +142,7 @@ export default function App() {
       };
     }
 
-    const left = Math.min(startX.value, endX.value) + chartBoundsRef.current.left;
+    const left = Math.min(startX.value, endX.value) + chartLeft;
     const selectionWidth = Math.abs(endX.value - startX.value);
 
     return {
@@ -154,7 +158,7 @@ export default function App() {
       borderColor: 'rgba(0, 122, 255, 0.8)',
       zIndex: 10,
     };
-  });
+  }, [chartLeft]);
 
   // Simplified handle styles for debugging
   const leftHandleStyle = useAnimatedStyle(() => ({
@@ -215,7 +219,11 @@ export default function App() {
       });
 
     })
-    .minDistance(0); // Allow immediate selection without movement
+    .minDistance(0)
+
+  useEffect(() => {
+    setChartLeft(chartBoundsRef.current.left);
+  }, [chartBoundsRef.current.left]);
 
   return (
     <View style={styles.container}>
@@ -228,17 +236,18 @@ export default function App() {
             yKeys={["valueAvg"]}
             axisOptions={{
               font,
-              formatXLabel: (value) => dayjs(value).format('DD-MM'),
-              tickCount: { x: 10, y: 5 },
+              formatXLabel: (value) => dayjs(value).format('DD-MM HH:mm'),
+              // tickCount: { x: 7, y: 5 },
+              tickValues: { y: [0, sampleData[0]?.max], x: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10] },
             }}
+            padding={{ top: 0, bottom: 0, left: 0, right: 0 }}
             chartPressState={[state]}
           >
             {({ points, chartBounds }) => {
-              if (!points) return null;
-              chartBoundsRef.current = chartBounds
+              chartBoundsRef.current = chartBounds;
               return (
                 <>
-                  {sampleData.map((entity, i) => (
+                  {sampleData.map((_, i) => (
                     <React.Fragment key={i}>
                       <VictoryLine
                         points={points.valueAvg || []}
@@ -272,7 +281,6 @@ const styles = StyleSheet.create({
   },
   chartContainer: {
     width: '90%',
-    height: '60%',
     position: 'relative',
     marginBottom: 50, // Increase margin to accommodate labels
   },
