@@ -26,13 +26,6 @@ type LogAnalog = {
   max?: number;
 };
 
-// Add this type definition near the top of the file
-type SelectionLabelProps = {
-  date: Date | null;
-  xPosition: number;
-  isStart?: boolean;
-};
-
 // Function to generate sample data
 const generateSampleData = (points: number): LogAnalog[] => {
   const data: LogAnalog[] = [];
@@ -45,7 +38,7 @@ const generateSampleData = (points: number): LogAnalog[] => {
       max = baseValue;
     }
     data.push({
-      dateTimeLocal: currentDate.format('YYYY-MM-DD[T]HH:mm:ss.SSS[Z]'),
+      dateTimeLocal: currentDate.format('YYYY-MM-DD HH:mm:ss'),
       entityId: 'entity1',
       entityIndex: '1',
       entityName: `Sensor ${1}`,
@@ -61,60 +54,103 @@ const generateSampleData = (points: number): LogAnalog[] => {
 };
 
 // Generate 100 points for each of 3 sensors
-const sampleData = generateSampleData(20);
+const sampleData = generateSampleData(20) as LogAnalog[];
 
-function SelectionLabels({ 
+// Function to convert x position to date
+const getDateFromXPosition = (
+  xPos: number,
+  chartWidth: number,
+  data: []
+): Date | null => {
+
+  const normalizedX = Math.max(0, Math.min(xPos, chartWidth));
+  const percentage = normalizedX / chartWidth;
+
+  // Sort data chronologically
+  const sortedDates = [...data]
+    .sort((a, b) => new Date(a.dateTimeLocal).getTime() - new Date(b.dateTimeLocal).getTime());
+
+  const index = Math.floor(percentage * (sortedDates.length - 1));
+  return index >= 0 ? new Date(sortedDates[index].dateTimeLocal) : null;
+};
+
+function SelectionLabels({
   startX,
   endX,
-}: { 
+  chartBounds,
+  data
+}: {
   startX: SharedValue<number | null>,
   endX: SharedValue<number | null>,
+  chartBounds: { left: number; right: number; top: number; bottom: number; },
+  data: LogAnalog[]
 }) {
   const ReanimatedText = Animated.createAnimatedComponent(TextInput);
 
-  // Create styles for both start and end labels
+  const startAnimatedProps = useAnimatedProps(() => ({
+    value: getDateFromXPosition(startX.value ?? 0, chartBounds.right - chartBounds.left, data)
+  }));
+
+  const endAnimatedProps = useAnimatedProps(() => ({
+    value: getDateFromXPosition(endX.value ?? 0, chartBounds.right - chartBounds.left, data)
+  }));
+
   const startLabelStyle = useAnimatedStyle(() => ({
     position: 'absolute',
     left: startX.value ?? 0,
-    transform: [{ translateX: -20 }],
+    transform: [{ translateX: -40 }],
+    top: -30,
     padding: 4,
     zIndex: 1000,
     borderRadius: 4,
     height: 20,
     opacity: startX.value !== null ? 1 : 0,
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 1,
+    },
+    shadowOpacity: 0.2,
+    shadowRadius: 1.41,
+    elevation: 2,
   }));
 
   const endLabelStyle = useAnimatedStyle(() => ({
     position: 'absolute',
     left: endX.value ?? 0,
-    transform: [{ translateX: -20 }],
+    transform: [{ translateX: -40 }],
+    top: -30,
     padding: 4,
     zIndex: 1000,
     borderRadius: 4,
     height: 20,
     opacity: endX.value !== null ? 1 : 0,
-  }));
-
-  const startAnimatedProps = useAnimatedProps(() => ({
-    value: startX.value?.toString() ?? ''
-  }));
-
-  const endAnimatedProps = useAnimatedProps(() => ({
-    value: endX.value?.toString() ?? ''
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 1,
+    },
+    shadowOpacity: 0.2,
+    shadowRadius: 1.41,
+    elevation: 2,
   }));
 
   return (
     <>
       <Animated.View style={startLabelStyle}>
-        <ReanimatedText 
+        <ReanimatedText
           animatedProps={startAnimatedProps}
-          style={{ fontSize: 14, color: '#000', height: 20 }}
+          style={{ fontSize: 12, color: '#000', height: 20, minWidth: 80 }}
+          editable={false}
         />
       </Animated.View>
       <Animated.View style={endLabelStyle}>
-        <ReanimatedText 
+        <ReanimatedText
           animatedProps={endAnimatedProps}
-          style={{ fontSize: 14, color: '#000', height: 20 }}
+          style={{ fontSize: 12, color: '#000', height: 20, minWidth: 80 }}
+          editable={false}
         />
       </Animated.View>
     </>
@@ -166,20 +202,6 @@ export default function App() {
   const startDate = useSharedValue<Date | null>(null);
   const endDate = useSharedValue<Date | null>(null);
 
-
-  // Function to convert x position to date
-  const getDateFromXPosition = (xPos: number): Date | null => {
-    const chartWidth = widthBounds;
-    const normalizedX = Math.max(0, Math.min(xPos, chartWidth));
-    const percentage = normalizedX / chartWidth;
-
-    // Sort data chronologically
-    const sortedDates = [...sampleData]
-      .sort((a, b) => new Date(a.dateTimeLocal).getTime() - new Date(b.dateTimeLocal).getTime());
-
-    const index = Math.floor(percentage * (sortedDates.length - 1));
-    return index >= 0 ? dayjs(sortedDates[index].dateTimeLocal).format('YYYY-MM-DD[T]HH:mm:ss') : null;
-  };
 
   // Add a state to track chartBounds changes
   const [chartLeft, setChartLeft] = useState(0);
@@ -256,11 +278,11 @@ export default function App() {
           chartBoundsRef.current.right - chartBoundsRef.current.left
         )
       );
-      
+
       isSelecting.value = true;
       startX.value = xPos;
 
-      const initialDate = getDateFromXPosition(xPos);
+      const initialDate = getDateFromXPosition(xPos, chartBoundsRef.current.right - chartBoundsRef.current.left, sampleData);
       if (initialDate) {
         startDate.value = initialDate;
         endDate.value = initialDate;
@@ -275,21 +297,28 @@ export default function App() {
             chartBoundsRef.current.right - chartBoundsRef.current.left
           )
         );
-        
+
         endX.value = xPos;
-        console.log('Updated endX:', xPos);
-        console.log('Current state:', state.y.valueAvg.value.value);
       }
     })
     .onEnd(() => {
       isSelecting.value = false;
       console.log('Selection range:', {
-        start: startDate.value ? dayjs(startDate.value).format('DD-MM-YYYY HH:mm:ss') : null,
-        end: endDate.value ? dayjs(endDate.value).format('DD-MM-YYYY HH:mm:ss') : null
+        start: startDate.value ? getDateFromXPosition(startX.value ?? 0, chartBoundsRef.current.right - chartBoundsRef.current.left, sampleData) : null,
+        end: endDate.value ? getDateFromXPosition(endX.value ?? 0, chartBoundsRef.current.right - chartBoundsRef.current.left, sampleData) : null
       });
 
     })
     .minDistance(0)
+
+  const xTicks = () => {
+    const ticks = 10;
+    const step = Math.ceil(sampleData.length / ticks)
+    return Array.from({ length: ticks }, (_, i) => {
+      if (i * step >= sampleData.length) return sampleData.length - 1;
+      return i * step
+    });
+  }
 
   useEffect(() => {
     setChartLeft(chartBoundsRef.current.left);
@@ -301,19 +330,26 @@ export default function App() {
         <View style={styles.chartContainer}>
           <CartesianChart
             data={sampleData}
-            domainPadding={{ top: 100, bottom: 100 }}
+            domainPadding={{ top: 0, bottom: 0, left: 0, right:0 }}
             xKey="dateTimeLocal"
             yKeys={["valueAvg"]}
             axisOptions={{
               font,
-              formatXLabel: (value) => dayjs(value).format('DD-MM HH:mm'),
-              tickValues: { y: 
-                Array.from({ length: 6 }, (_, i) => {
-                  const maxValue = sampleData[0]?.max ?? 0;
-                  const step = Math.ceil(maxValue / 25) * 5;
-                  return i * step;
-                }),
-                x: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10] 
+              formatXLabel: (value) => {
+                return dayjs(value).format('DD.MM')
+              },
+              tickCount: {
+                x: 10,
+                y: 6
+              },
+              tickValues: {
+                y:
+                  Array.from({ length: 6 }, (_, i) => {
+                    const maxValue = sampleData[0]?.max ?? 0;
+                    const step = Math.ceil(maxValue / 25) * 5;
+                    return i * step;
+                  }),
+                x: xTicks()
               },
             }}
             padding={{ top: 0, bottom: 0, left: 0, right: 0 }}
@@ -340,11 +376,11 @@ export default function App() {
           <Animated.View style={selectionOverlayStyle} />
           <Animated.View style={leftHandleStyle} />
           <Animated.View style={rightHandleStyle} />
-          <SelectionLabels 
+          <SelectionLabels
             startX={startX}
-            endX={endX} 
-            state={state}
+            endX={endX}
             chartBounds={chartBoundsRef.current}
+            data={sampleData}
           />
         </View>
       </GestureDetector>
