@@ -132,7 +132,7 @@ function SelectionLabels({
       <Animated.View style={endLabelStyle}>
         <ReanimatedText
           animatedProps={endAnimatedProps}
-          style={{ fontSize: 18, fontWeight: '600', color: '#000', height: 20, minWidth: 80, borderWidth: 0 }}
+          style={{ fontSize: 18, fontWeight: '600',color: '#000', height: 20, minWidth: 80, borderWidth: 0 }}
           editable={false}
         />
       </Animated.View>
@@ -142,6 +142,22 @@ function SelectionLabels({
 
 // Add this type definition near the top of the file
 type DragMode = 'none' | 'left' | 'right' | 'new';
+
+// Добавим функцию для определения хендлеров по их текущей позиции
+function getHandlePositions(
+  startX: SharedValue<number | null>,
+  endX: SharedValue<number | null>
+) {
+  if (startX.value === null || endX.value === null) {
+    return { left: 0, right: 0, isStartLeft: true };
+  }
+  const isStartLeft = startX.value <= endX.value;
+  return {
+    left: isStartLeft ? startX.value : endX.value,
+    right: isStartLeft ? endX.value : startX.value,
+    isStartLeft
+  };
+}
 
 export default function App() {
   const selected = {
@@ -270,34 +286,24 @@ export default function App() {
       );
 
       // Check if we're near either handle
-      const handleWidth = 20; // Increased touch area for handles
-      const isNearLeftHandle = startX.value !== null && 
-        Math.abs(xPos - startX.value) < handleWidth;
-      const isNearRightHandle = endX.value !== null && 
-        Math.abs(xPos - endX.value) < handleWidth;
+      const handleWidth = 20;
+      const { left, right } = getHandlePositions(startX, endX);
+      
+      const isNearLeftHandle = Math.abs(xPos - left) < handleWidth;
+      const isNearRightHandle = Math.abs(xPos - right) < handleWidth;
 
       if (isNearLeftHandle) {
         isSelecting.value = 'left';
       } else if (isNearRightHandle) {
         isSelecting.value = 'right';
       } else if (startX.value === null || endX.value === null) {
-        // Start new selection if there isn't one
         isSelecting.value = 'new';
         startX.value = xPos;
         endX.value = xPos;
       } else {
-        // Start new selection if clicking outside current selection
         isSelecting.value = 'new';
         startX.value = xPos;
         endX.value = xPos;
-      }
-
-      const initialDate = getDateFromXPosition(xPos, chartBoundsRef.current.right - chartBoundsRef.current.left, sampleData);
-      if (initialDate) {
-        if (isSelecting.value === 'new') {
-          startDate.value = initialDate;
-          endDate.value = initialDate;
-        }
       }
     })
     .onUpdate((event) => {
@@ -311,17 +317,23 @@ export default function App() {
         )
       );
 
+      const { left, right, isStartLeft } = getHandlePositions(startX, endX);
+
       switch (isSelecting.value) {
         case 'left':
-          // Don't allow left handle to go beyond right handle
-          if (endX.value !== null && xPos < endX.value) {
-            startX.value = xPos;
+          // Обновляем значение того хендлера, который сейчас слева
+          if (isStartLeft) {
+            if (xPos < right) startX.value = xPos;
+          } else {
+            if (xPos < right) endX.value = xPos;
           }
           break;
         case 'right':
-          // Don't allow right handle to go before left handle
-          if (startX.value !== null && xPos > startX.value) {
-            endX.value = xPos;
+          // Обновляем значение того хендлера, который сейчас справа
+          if (isStartLeft) {
+            if (xPos > left) endX.value = xPos;
+          } else {
+            if (xPos > left) startX.value = xPos;
           }
           break;
         case 'new':
@@ -331,10 +343,6 @@ export default function App() {
     })
     .onEnd(() => {
       isSelecting.value = 'none';
-      console.log('Selection range:', {
-        start: startDate.value ? getDateFromXPosition(startX.value ?? 0, chartBoundsRef.current.right - chartBoundsRef.current.left, sampleData) : null,
-        end: endDate.value ? getDateFromXPosition(endX.value ?? 0, chartBoundsRef.current.right - chartBoundsRef.current.left, sampleData) : null
-      });
     })
     .minDistance(0);
 
