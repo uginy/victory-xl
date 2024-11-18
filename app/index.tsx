@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { StyleSheet, View, TextInput } from 'react-native';
+import { StyleSheet, View, TextInput, Text } from 'react-native';
 import { CartesianChart, Line as VictoryLine } from 'victory-native';
 import dayjs from 'dayjs';
 import utc from 'dayjs/plugin/utc';
@@ -153,6 +153,14 @@ function getHandlePositions(
     isStartLeft
   };
 }
+
+// Компонент для отображения выбранных дат
+const SelectedDateLabels = ({ start, end }: { start: Date; end: Date }) => (
+  <View style={styles.dateLabelsContainer}>
+    <Text style={styles.dateLabel}>Start: {dayjs(start).format('DD.MM.YYYY')}</Text>
+    <Text style={styles.dateLabel}>End: {dayjs(end).format('DD.MM.YYYY')}</Text>
+  </View>
+);
 
 export default function App() {
   const selected = {
@@ -459,6 +467,7 @@ export default function App() {
 
   return (
     <View style={styles.container}>
+      <SelectedDateLabels start={selected.start} end={selected.end} />
       <GestureDetector gesture={gesture}>
         <View style={[styles.chartContainer, chartContainerStyle.container]}>
           <CartesianChart
@@ -602,5 +611,18 @@ const styles = StyleSheet.create({
     color: 'white',
     fontSize: 12,
     fontWeight: '600',
+  },
+  dateLabelsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    width: '90%',
+    marginBottom: 40,
+    marginTop: 20,
+  },
+  dateLabel: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#000',
+    marginHorizontal: 10,
   },
 });
