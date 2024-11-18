@@ -189,8 +189,15 @@ export default function App() {
 
   const gesture = Gesture.Pan()
     .onBegin((event) => {
-      const chartWidth = widthBounds
-      const xPos = - chartBoundsRef.current.left + Math.max(0, Math.min(event.x, chartWidth));
+      // Clamp the initial position within chart bounds
+      const xPos = Math.max(
+        0,
+        Math.min(
+          event.x - chartBoundsRef.current.left,
+          chartBoundsRef.current.right - chartBoundsRef.current.left
+        )
+      );
+      
       isSelecting.value = true;
       startX.value = xPos;
 
@@ -202,8 +209,15 @@ export default function App() {
     })
     .onUpdate((event) => {
       if (isSelecting.value) {
-        const chartWidth = widthBounds
-        const xPos = - chartBoundsRef.current.left + Math.max(0, Math.min(event.x, chartWidth));
+        // Clamp the update position within chart bounds
+        const xPos = Math.max(
+          0,
+          Math.min(
+            event.x - chartBoundsRef.current.left,
+            chartBoundsRef.current.right - chartBoundsRef.current.left
+          )
+        );
+        
         endX.value = xPos;
         const newEndDate = getDateFromXPosition(xPos);
         if (newEndDate) {
