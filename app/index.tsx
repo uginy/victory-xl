@@ -61,7 +61,7 @@ const getDateFromXPosition = (
   xPos: number,
   chartWidth: number,
   data: LogAnalog[],
-  format: string = 'DD.MM.YYYY HH:mm'
+  format = 'DD.MM.YYYY'
 ): string | null => {
 
   const normalizedX = Math.max(0, Math.min(xPos, chartWidth));
@@ -105,16 +105,7 @@ function SelectionLabels({
     zIndex: 1000,
     borderRadius: 4,
     height: 20,
-    opacity: startX.value !== null ? 1 : 0,
-    backgroundColor: 'rgba(255, 255, 255, 0.9)',
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 1,
-    },
-    shadowOpacity: 0.2,
-    shadowRadius: 1.41,
-    elevation: 2,
+    opacity: startX.value !== null ? 1 : 0
   }));
 
   const endLabelStyle = useAnimatedStyle(() => ({
@@ -126,16 +117,7 @@ function SelectionLabels({
     zIndex: 1000,
     borderRadius: 4,
     height: 20,
-    opacity: endX.value !== null ? 1 : 0,
-    backgroundColor: 'rgba(255, 255, 255, 0.9)',
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 1,
-    },
-    shadowOpacity: 0.2,
-    shadowRadius: 1.41,
-    elevation: 2,
+    opacity: endX.value !== null ? 1 : 0
   }));
 
   return (
@@ -143,14 +125,14 @@ function SelectionLabels({
       <Animated.View style={startLabelStyle}>
         <ReanimatedText
           animatedProps={startAnimatedProps}
-          style={{ fontSize: 12, color: '#000', height: 20, minWidth: 80 }}
+          style={{ fontSize: 18, fontWeight: '600', color: '#000', height: 20, minWidth: 80,  borderWidth: 0 }}
           editable={false}
         />
       </Animated.View>
       <Animated.View style={endLabelStyle}>
         <ReanimatedText
           animatedProps={endAnimatedProps}
-          style={{ fontSize: 12, color: '#000', height: 20, minWidth: 80 }}
+          style={{ fontSize: 18, fontWeight: '600', color: '#000', height: 20, minWidth: 80, borderWidth: 0 }}
           editable={false}
         />
       </Animated.View>
