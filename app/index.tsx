@@ -125,14 +125,14 @@ function SelectionLabels({
       <Animated.View style={startLabelStyle}>
         <ReanimatedText
           animatedProps={startAnimatedProps}
-          style={{ fontSize: 18, fontWeight: '600', color: '#000', height: 20, minWidth: 80,  borderWidth: 0 }}
+          style={{ fontSize: 18, fontWeight: '600', color: '#000', height: 20, minWidth: 80, borderWidth: 0 }}
           editable={false}
         />
       </Animated.View>
       <Animated.View style={endLabelStyle}>
         <ReanimatedText
           animatedProps={endAnimatedProps}
-          style={{ fontSize: 18, fontWeight: '600',color: '#000', height: 20, minWidth: 80, borderWidth: 0 }}
+          style={{ fontSize: 18, fontWeight: '600', color: '#000', height: 20, minWidth: 80, borderWidth: 0 }}
           editable={false}
         />
       </Animated.View>
@@ -141,7 +141,7 @@ function SelectionLabels({
 }
 
 // Add this type definition near the top of the file
-type DragMode = 'none' | 'left' | 'right' | 'new';
+type DragMode = 'none' | 'left' | 'right' | 'new' | 'move';
 
 
 function getHandlePositions(
@@ -197,7 +197,7 @@ export default function App() {
 
   const getDatePos = (pos: any) => getDateFromXPosition(pos ?? 0, chartBoundsRef.current.right - chartBoundsRef.current.left, sampleData)
 
-  
+
   const startX = useSharedValue<number | null>(null);
   const endX = useSharedValue<number | null>(null);
   const isSelecting = useSharedValue<DragMode>('none');
@@ -274,6 +274,11 @@ export default function App() {
     ]
   }));
 
+  // Добавим новые shared values для отслеживания позиции клика
+  const initialTouchX = useSharedValue(0);
+  const initialSelectionOffset = useSharedValue(0);
+
+  // Обновляем обработчик gesture
   const gesture = Gesture.Pan()
     .onBegin((event) => {
       const xPos = Math.max(
@@ -284,12 +289,17 @@ export default function App() {
         )
       );
 
-      // Check if we're near either handle
+      // Check if we're near either handle or in selection area
       const handleWidth = 20;
       const { left, right } = getHandlePositions(startX, endX);
-      
+
       const isNearLeftHandle = Math.abs(xPos - left) < handleWidth;
       const isNearRightHandle = Math.abs(xPos - right) < handleWidth;
+      const isInSelection = xPos > left + handleWidth && xPos < right - handleWidth;
+
+      // Сохраняем начальную позицию клика и смещение относительно левого края выделения
+      initialTouchX.value = xPos;
+      initialSelectionOffset.value = xPos - left;
 
       const currentDate = getDateFromXPosition(xPos, chartBoundsRef.current.right - chartBoundsRef.current.left, sampleData);
 
@@ -297,21 +307,23 @@ export default function App() {
         isSelecting.value = 'left';
       } else if (isNearRightHandle) {
         isSelecting.value = 'right';
+      } else if (isInSelection && startX.value !== null && endX.value !== null) {
+        isSelecting.value = 'move';
       } else if (startX.value === null || endX.value === null) {
         isSelecting.value = 'new';
         startX.value = xPos;
         endX.value = xPos;
         if (currentDate) {
-          startDate.value = currentDate
-          endDate.value = currentDate
+          startDate.value = currentDate;
+          endDate.value = currentDate;
         }
       } else {
         isSelecting.value = 'new';
         startX.value = xPos;
         endX.value = xPos;
         if (currentDate) {
-          startDate.value = currentDate
-          endDate.value = currentDate
+          startDate.value = currentDate;
+          endDate.value = currentDate;
         }
       }
     })
@@ -330,6 +342,50 @@ export default function App() {
       const currentDate = getDateFromXPosition(xPos, chartBoundsRef.current.right - chartBoundsRef.current.left, sampleData);
 
       switch (isSelecting.value) {
+        case 'move':
+          if (startX.value === null || endX.value === null) return;
+
+          const selectionWidth = Math.abs(endX.value - startX.value);
+
+          // Вычисляем новую позицию с учетом начального смещения клика
+          const newLeft = Math.max(0, xPos - initialSelectionOffset.value);
+          const newRight = Math.min(
+            chartBoundsRef.current.right - chartBoundsRef.current.left,
+            newLeft + selectionWidth
+          );
+
+          // Проверяем, не выходим ли за границы
+          if (newRight <= chartBoundsRef.current.right - chartBoundsRef.current.left && newLeft >= 0) {
+            if (isStartLeft) {
+              startX.value = newLeft;
+              endX.value = newRight;
+            } else {
+              endX.value = newLeft;
+              startX.value = newRight;
+            }
+
+            const newStartDate = getDateFromXPosition(
+              newLeft,
+              chartBoundsRef.current.right - chartBoundsRef.current.left,
+              sampleData
+            );
+            const newEndDate = getDateFromXPosition(
+              newRight,
+              chartBoundsRef.current.right - chartBoundsRef.current.left,
+              sampleData
+            );
+
+            if (newStartDate && newEndDate) {
+              if (isStartLeft) {
+                startDate.value = newStartDate
+                endDate.value = newEndDate
+              } else {
+                endDate.value = newStartDate
+                startDate.value = newEndDate
+              }
+            }
+          }
+          break;
         case 'left':
           if (currentDate) {
             if (isStartLeft) {
@@ -372,7 +428,7 @@ export default function App() {
       isSelecting.value = 'none';
       console.log('Selection range:', {
         start: startDate.value ? startDate.value : null,
-        end: endDate.value ? endDate.value: null
+        end: endDate.value ? endDate.value : null
       });
     })
     .minDistance(0);
@@ -389,11 +445,11 @@ export default function App() {
   useEffect(() => {
     startX.value = getXPositionFromDate(selected.start);
     startDate.value = dayjs(selected.start).format("DD.MM.YYYY");
-  
+
     endX.value = getXPositionFromDate(selected.end);
     endDate.value = dayjs(selected.end).format("DD.MM.YYYY");
   }, [selected]);
-  
+
   useEffect(() => {
     setChartLeft(chartBoundsRef.current.left);
   }, [chartBoundsRef.current.left]);
@@ -404,7 +460,7 @@ export default function App() {
         <View style={styles.chartContainer}>
           <CartesianChart
             data={sampleData}
-            domainPadding={{ top: 0, bottom: 0, left: 0, right:0 }}
+            domainPadding={{ top: 0, bottom: 0, left: 0, right: 0 }}
             xKey="dateTimeLocal"
             yKeys={["valueAvg"]}
             axisOptions={{
