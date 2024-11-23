@@ -1,0 +1,16 @@
+
+> victory-xl@1.0.0 web
+> expo start --web
+
+Starting project at /workspace/victory-xl
+(node:663) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+Starting Metro Bundler
+The following packages should be updated for best compatibility with the installed expo version:
+  expo@51.0.32 - expected version: ~51.0.39
+  expo-router@3.5.23 - expected version: ~3.5.24
+Your project may not work correctly until you install the expected versions of the packages.
+Waiting on http://localhost:8081
+Logs for your project will appear below.
+Web Bundled 4501ms index.web.tsx (2021 modules)
+ LOG  [web] Logs will appear in the browser console
